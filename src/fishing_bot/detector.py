@@ -166,8 +166,9 @@ class Detector:
     ) -> Fish | None:
         """
         Balık siluetini tespit eder.
-        Sadece HSV renk filtreleme ile hızlı arama yapar.
-        Sadece daire bölgesi içinde arama yapar (performans optimizasyonu).
+        Metin2'de balık rengi suyla çok yakın olduğu için HSV çalışmaz.
+        Bunun yerine sadece Grayscale (Adaptive Threshold) yöntemi kullanılır.
+        Süper Hızlı Optimizasyon: np.median yerine np.mean kullanır.
         """
         cfg = self._fish_cfg
 
@@ -183,26 +184,21 @@ class Detector:
                 -1,
             )
 
-        # ── HSV renk filtreleme (Hızlı ve Güvenilir) ──
-        return self._detect_fish_hsv(frame, mask_roi, cfg)
+        # ── Süper Hızlı Adaptive Threshold ──
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-    def _detect_fish_hsv(
-        self,
-        frame: np.ndarray,
-        mask_roi: np.ndarray | None,
-        cfg: FishDetectConfig,
-    ) -> Fish | None:
-        """HSV renk filtreleme ile balık tespiti."""
         if mask_roi is not None:
-            roi_frame = cv2.bitwise_and(frame, frame, mask=mask_roi)
+            # Sadece ROI bölgesinin ortalamasını al (Median'dan 10x daha hızlıdır).
+            roi_pixels = gray[mask_roi > 0]
+            if len(roi_pixels) == 0:
+                return None
+            mean_val = np.mean(roi_pixels)
         else:
-            roi_frame = frame
+            mean_val = np.mean(gray)
 
-        hsv = cv2.cvtColor(roi_frame, cv2.COLOR_BGR2HSV)
-
-        lower = np.array(cfg.hsv_lower, dtype=np.uint8)
-        upper = np.array(cfg.hsv_upper, dtype=np.uint8)
-        mask = cv2.inRange(hsv, lower, upper)
+        # Ortalamadan 25-30 birim daha koyu pikselleri (gölgeyi) balık olarak kabul et.
+        threshold = max(0, int(mean_val - 25))
+        mask = cv2.inRange(gray, 0, threshold)
 
         if mask_roi is not None:
             mask = cv2.bitwise_and(mask, mask_roi)
@@ -215,11 +211,12 @@ class Detector:
         cfg: FishDetectConfig,
     ) -> Fish | None:
         """Maskeden en uygun contour'u bulur ve Fish döndürür."""
-        # Morfolojik işlemler (gürültü temizleme).
+        # Yüksek performanslı morfolojik işlemler (Gürültü temizleme).
+        # FPS'i düşürmemesi için iterasyon 1'e çekildi.
         mask = cv2.erode(mask, self._morph_kernel, iterations=1)
-        mask = cv2.dilate(mask, self._morph_kernel, iterations=2)
+        mask = cv2.dilate(mask, self._morph_kernel, iterations=1)
 
-        mask = cv2.GaussianBlur(mask, (cfg.blur_kernel_size, cfg.blur_kernel_size), 0)
+        mask = cv2.GaussianBlur(mask, (3, 3), 0)
         _, mask = cv2.threshold(mask, 127, 255, cv2.THRESH_BINARY)
 
         contours, _ = cv2.findContours(

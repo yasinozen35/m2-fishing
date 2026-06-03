@@ -75,7 +75,7 @@ else:
 from fishing_bot.config import HumanConfig, CaptureConfig
 
 # PyAutoGUI güvenlik ayarları.
-pyautogui.FAILSAFE = True       # Sol üst köşeye gidince program durur.
+pyautogui.FAILSAFE = False      # Sol üst köşeye gidince program çökmesin (Oyunlarda sık olur).
 pyautogui.PAUSE = 0.0           # Otomatik bekleme yok (biz kendimiz yönetiyoruz).
 
 

@@ -112,9 +112,9 @@ class Detector:
         Hough Circle Transform ile büyük daireyi tespit eder.
         Cache mekanizması ile her karede yeniden hesaplamaz.
         """
-        # Cache hala geçerliyse, cached değeri döndür.
-        if self._cached_circle is not None and self._cache_counter > 0:
-            self._cache_counter -= 1
+        # Cache varsa, cached değeri sonsuza kadar döndür (Manuel silinene kadar).
+        # Bu sayede Minigame içindeki efektler sırasında HoughCircles çalışıp bilgisayarı DONDURMAZ!
+        if self._cached_circle is not None:
             return self._cached_circle
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -148,7 +148,6 @@ class Detector:
 
         # Cache'e kaydet.
         self._cached_circle = detected
-        self._cache_counter = cfg.cache_ttl_frames
 
         return detected
 

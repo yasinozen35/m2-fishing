@@ -165,42 +165,21 @@ class Detector:
     ) -> Fish | None:
         """
         Balık siluetini tespit eder.
-        Metin2'de balık rengi suyla çok yakın olduğu için HSV çalışmaz.
-        Bunun yerine sadece Grayscale (Adaptive Threshold) yöntemi kullanılır.
-        Süper Hızlı Optimizasyon: np.median yerine np.mean kullanır.
+        Görüntü Maskelemesi iptal edildi: Bot balığı daire dışında olsa bile
+        tüm kare içinde arar. Bu sayede balık asla kaybolmaz.
+        İçeride olup olmadığı matematiksel olarak kontrol edilir.
         """
         cfg = self._fish_cfg
-
-        # Daire ROI maskesi oluştur.
-        mask_roi = None
-        if circle is not None:
-            mask_roi = np.zeros(frame.shape[:2], dtype=np.uint8)
-            cv2.circle(
-                mask_roi,
-                (circle.center_x, circle.center_y),
-                int(circle.radius * self._circle_cfg.inner_margin),
-                255,
-                -1,
-            )
 
         # ── Süper Hızlı Adaptive Threshold ──
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        if mask_roi is not None:
-            # Sadece ROI bölgesinin ortalamasını al (Median'dan 10x daha hızlıdır).
-            roi_pixels = gray[mask_roi > 0]
-            if len(roi_pixels) == 0:
-                return None
-            mean_val = np.mean(roi_pixels)
-        else:
-            mean_val = np.mean(gray)
+        # Tüm ekranın ortalamasını alarak balığı (koyu gölgeyi) tespit et.
+        mean_val = np.mean(gray)
 
-        # Ortalamadan 25-30 birim daha koyu pikselleri (gölgeyi) balık olarak kabul et.
+        # Ortalamadan 25 birim daha koyu pikselleri (gölgeyi) balık olarak kabul et.
         threshold = max(0, int(mean_val - 25))
         mask = cv2.inRange(gray, 0, threshold)
-
-        if mask_roi is not None:
-            mask = cv2.bitwise_and(mask, mask_roi)
 
         return self._find_best_contour(mask, cfg)
 

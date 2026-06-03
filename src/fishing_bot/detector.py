@@ -165,21 +165,42 @@ class Detector:
     ) -> Fish | None:
         """
         Balık siluetini tespit eder.
-        Görüntü Maskelemesi iptal edildi: Bot balığı daire dışında olsa bile
-        tüm kare içinde arar. Bu sayede balık asla kaybolmaz.
-        İçeride olup olmadığı matematiksel olarak kontrol edilir.
+        Süper Hızlı Adaptive Threshold yöntemi kullanılır.
         """
         cfg = self._fish_cfg
+
+        # Daire ROI maskesi oluştur.
+        mask_roi = None
+        if circle is not None:
+            mask_roi = np.zeros(frame.shape[:2], dtype=np.uint8)
+            # Daire yarıçapını +30 piksel BÜYÜTÜYORUZ ki balık çember dışındayken KESİLMESİN (Körlük yaşanmasın).
+            # Fakat UI elemanlarına (skor vs) çarpmayacak kadar da kısıtlı bir bölgede kalsın.
+            cv2.circle(
+                mask_roi,
+                (circle.center_x, circle.center_y),
+                int(circle.radius + 30),
+                255,
+                -1,
+            )
 
         # ── Süper Hızlı Adaptive Threshold ──
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        # Tüm ekranın ortalamasını alarak balığı (koyu gölgeyi) tespit et.
-        mean_val = np.mean(gray)
+        if mask_roi is not None:
+            # Sadece ROI bölgesinin ortalamasını al (Suyun rengi)
+            roi_pixels = gray[mask_roi > 0]
+            if len(roi_pixels) == 0:
+                return None
+            mean_val = np.mean(roi_pixels)
+        else:
+            mean_val = np.mean(gray)
 
         # Ortalamadan 25 birim daha koyu pikselleri (gölgeyi) balık olarak kabul et.
         threshold = max(0, int(mean_val - 25))
         mask = cv2.inRange(gray, 0, threshold)
+
+        if mask_roi is not None:
+            mask = cv2.bitwise_and(mask, mask_roi)
 
         return self._find_best_contour(mask, cfg)
 

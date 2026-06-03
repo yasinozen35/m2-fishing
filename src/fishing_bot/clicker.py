@@ -32,13 +32,16 @@ if sys.platform == "win32":
         @staticmethod
         def click():
             ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-            time.sleep(0.01)
+            # Bir insan farenin sol tıkına 10ms'de basıp çekemez. 
+            # Anti-Cheat sistemleri 50ms altını Makro/Bot sayıp prosesi 3 saniye DONDURARAK CEZALANDIRIR (Tarpit).
+            # Bunu aşmak için basılı tutma süresini organik yapıyoruz.
+            time.sleep(random.uniform(0.08, 0.15))
             ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
             
         @staticmethod
         def rightClick():
             ctypes.windll.user32.mouse_event(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, 0)
-            time.sleep(0.01)
+            time.sleep(random.uniform(0.08, 0.15))
             ctypes.windll.user32.mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0)
             
         @staticmethod
@@ -137,7 +140,8 @@ class HumanClicker:
         # Işınlanma ve tıklama işlemini anlık (Fire-and-Forget) bir Thread içinde atıyoruz!
         def _async_click():
             gui_module.moveTo(final_x, final_y)
-            time.sleep(0.01) # Mouse algılama süresi
+            # Fare hedefe vardığında insan beyni "vur" emrini verene kadar ufak bir süre geçer
+            time.sleep(random.uniform(0.04, 0.08)) 
             gui_module.click()
             
         import threading

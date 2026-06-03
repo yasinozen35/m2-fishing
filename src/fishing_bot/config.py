@@ -66,7 +66,7 @@ class CircleDetectConfig:
     min_radius: int = 50           # Minimum daire yarıçapı (px)
     max_radius: int = 300          # Maksimum daire yarıçapı (px)
     cache_ttl_frames: int = 60     # Daire cache süresi (kare sayısı)
-    inner_margin: float = 0.85     # Daire iç bölge oranı (kenar toleransı)
+    inner_margin: float = 0.95     # Daire iç bölge oranı (Daha geniş alan toleransı)
 
 
 @dataclass
@@ -93,20 +93,21 @@ class FishDetectConfig:
 class HumanConfig:
     """İnsan benzeri davranış parametreleri."""
     # Reaksiyon süresi aralığı (saniye).
-    # Profesyonel oyuncu seviyesi: 80-200ms.
-    reaction_min: float = 0.08     # 80ms
-    reaction_max: float = 0.20     # 200ms
+    # Metin2'de balıklar (özellikle nadir olanlar) çok hızlıdır, bu yüzden reaksiyon süresi agresif tutulmalıdır.
+    reaction_min: float = 0.02     # 20ms
+    reaction_max: float = 0.06     # 60ms
 
     # Tıklama noktasında rastgele sapma (piksel).
-    # ±5px, tam merkeze tıklamamak için.
     aim_offset_px: int = 5
 
     # Mouse hareket süresi aralığı (saniye).
-    mouse_speed_min: float = 0.05  # 50ms
-    mouse_speed_max: float = 0.12  # 120ms
+    # Farenin hedefe gitme hızı çok seri olmalı (Aksi halde balık kaçar).
+    mouse_speed_min: float = 0.01  # 10ms
+    mouse_speed_max: float = 0.03  # 30ms
 
     # Tıklamalar arası minimum bekleme (saniye).
-    click_cooldown: float = 0.4
+    # Seri tıklama için cooldown düşürüldü.
+    click_cooldown: float = 0.15
 
 
 @dataclass

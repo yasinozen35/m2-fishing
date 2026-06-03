@@ -155,18 +155,24 @@ class BotLogic:
             else:
                 # Balık içerdeyse tıkla
                 if detection.is_fish_inside and detection.fish is not None:
-                    if self._clicker.is_ready:
-                        # Balığa tıkla
-                        if self._clicker.click_at(detection.fish.center_x, detection.fish.center_y):
-                            clicked = True
-                            self._click_count_in_minigame += 1
-                            
-                            # 3 tık başarılı olduysa skoru artır
-                            if self._click_count_in_minigame == 3:
-                                self.successful_catches += 1
-                                # 3 tık atıldı, minigame bitti sayılır
-                                # Oyun daireyi kapatacaktır, biz POST_CATCH'e geçebiliriz
-                                self._transition_to(BotState.POST_CATCH)
+                    # Bu balık daireye girdiğinden beri henüz TIKLANMADIYSA
+                    if not getattr(self, "_fish_clicked_this_pass", False):
+                        if self._clicker.is_ready:
+                            # Balığa tıkla
+                            if self._clicker.click_at(detection.fish.center_x, detection.fish.center_y):
+                                clicked = True
+                                self._click_count_in_minigame += 1
+                                self._fish_clicked_this_pass = True  # Artık bu balık çıkana kadar tıklama!
+                                
+                                # 3 tık başarılı olduysa skoru artır
+                                if self._click_count_in_minigame == 3:
+                                    self.successful_catches += 1
+                                    # 3 tık atıldı, minigame bitti sayılır
+                                    self._transition_to(BotState.POST_CATCH)
+                else:
+                    # Balık dışarı çıktığında (veya kaybolduğunda) flag'i sıfırla. 
+                    # Böylece içeri tekrar girerse tekrar tıklanabilir.
+                    self._fish_clicked_this_pass = False
 
         elif self.state == BotState.POST_CATCH:
             status_msg = f"Toparlaniyor... ({int(self._cfg.delay_after_catch - elapsed)}s)"
@@ -236,6 +242,7 @@ class BotLogic:
         
         if new_state == BotState.MINIGAME:
             self._click_count_in_minigame = 0
+            self._fish_clicked_this_pass = False
         elif new_state == BotState.PREPARE:
             self._prepare_action_done = False
         elif new_state == BotState.POST_CATCH:

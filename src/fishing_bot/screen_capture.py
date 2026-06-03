@@ -51,8 +51,10 @@ class ScreenCapture:
         """
         raw = self._sct.grab(self._monitor)
         # mss BGRA formatında döndürür, alpha kanalını atıp BGR'ye çeviriyoruz.
+        # MacOS arm64'te slice edilen non-contiguous bellek OpenCV'de Unknown C++ Exception hatası 
+        # verebilir. Bu yüzden .copy() ile bellekte bitişik yeni bir array oluşturuyoruz.
         frame = np.array(raw, dtype=np.uint8)
-        return frame[:, :, :3]  # BGRA → BGR (alpha kanalını at)
+        return frame[:, :, :3].copy()
 
     def grab_full_frame(self) -> np.ndarray:
         """
@@ -63,7 +65,7 @@ class ScreenCapture:
         monitor = self._sct.monitors[1]
         raw = self._sct.grab(monitor)
         frame = np.array(raw, dtype=np.uint8)
-        return frame[:, :, :3]
+        return frame[:, :, :3].copy()
 
     def close(self) -> None:
         """Kaynakları serbest bırakır."""

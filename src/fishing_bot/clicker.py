@@ -7,12 +7,24 @@ hafif koordinat sapması ile insan davranışını simüle eder.
 """
 
 import random
+import sys
 import time
 
 import pyautogui
 
-from fishing_bot.config import HumanConfig, CaptureConfig
+# Sadece Windows'ta pydirectinput kullan
+if sys.platform == "win32":
+    try:
+        import pydirectinput
+        gui_module = pydirectinput
+        pydirectinput.FAILSAFE = True
+        pydirectinput.PAUSE = 0.0
+    except ImportError:
+        gui_module = pyautogui
+else:
+    gui_module = pyautogui
 
+from fishing_bot.config import HumanConfig, CaptureConfig
 
 # PyAutoGUI güvenlik ayarları.
 pyautogui.FAILSAFE = True       # Sol üst köşeye gidince program durur.
@@ -76,10 +88,10 @@ class HumanClicker:
             self._human.mouse_speed_min,
             self._human.mouse_speed_max,
         )
-        pyautogui.moveTo(final_x, final_y, duration=move_duration)
+        gui_module.moveTo(final_x, final_y, duration=move_duration)
 
         # ── 5. Tıkla ──
-        pyautogui.click()
+        gui_module.click()
 
         self._last_click_time = time.time()
         return True
@@ -106,9 +118,9 @@ class HumanClicker:
         # İnsan tuşa anında basıp bırakamaz, ufak bir gecikme olur.
         hold_time = random.uniform(0.05, 0.12)
         
-        pyautogui.keyDown(key)
+        gui_module.keyDown(key)
         time.sleep(hold_time)
-        pyautogui.keyUp(key)
+        gui_module.keyUp(key)
 
     def right_click_at(self, screen_x: int, screen_y: int) -> None:
         """
@@ -120,10 +132,10 @@ class HumanClicker:
             self._human.mouse_speed_min,
             self._human.mouse_speed_max,
         )
-        pyautogui.moveTo(screen_x, screen_y, duration=move_duration)
+        gui_module.moveTo(screen_x, screen_y, duration=move_duration)
         
         # Ufak bir gecikme
         time.sleep(random.uniform(0.05, 0.1))
         
         # Sağ tıkla
-        pyautogui.click(button='right')
+        gui_module.rightClick() if hasattr(gui_module, 'rightClick') else gui_module.click(button='right')

@@ -58,6 +58,6 @@ if sys.platform == "win32":
 # ŞİMDİ güvenle import edebiliriz.
 # ══════════════════════════════════════════════════════════════════
 
-from fishing_bot.main import main
+from fishing_bot.gui import launch_gui
 
-main()
+launch_gui()

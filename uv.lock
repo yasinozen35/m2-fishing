@@ -116,6 +116,7 @@ dependencies = [
     { name = "numpy" },
     { name = "opencv-python" },
     { name = "pyautogui" },
+    { name = "pydirectinput" },
     { name = "requests" },
 ]
 
@@ -126,6 +127,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.0.0" },
     { name = "opencv-python", specifier = ">=4.10.0" },
     { name = "pyautogui", specifier = ">=0.9.54" },
+    { name = "pydirectinput", specifier = ">=1.0.4" },
     { name = "requests", specifier = ">=2.31.0" },
 ]
 
@@ -264,6 +266,15 @@ dependencies = [
     { name = "pytweening" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/65/ff/cdae0a8c2118a0de74b6cf4cbcdcaf8fd25857e6c3f205ce4b1794b27814/PyAutoGUI-0.9.54.tar.gz", hash = "sha256:dd1d29e8fd118941cb193f74df57e5c6ff8e9253b99c7b04f39cfc69f3ae04b2", size = 61236, upload-time = "2023-05-24T20:11:32.972Z" }
+
+[[package]]
+name = "pydirectinput"
+version = "1.0.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/5f/c0/cbcc5f1653d956ee2109b604747b7eaf37d59e50b41cc9dedabedf70aec6/PyDirectInput-1.0.4.tar.gz", hash = "sha256:bebe65102c69208688402f9f4cbd2ae7afc174fd2123e156e178b1304e7f80a2", size = 7486, upload-time = "2021-02-02T22:23:30.859Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c9/8e/f909defe798270afc2241d3a8986d51459e70c37f02d2ba549627b781b2c/PyDirectInput-1.0.4-py3-none-any.whl", hash = "sha256:238bbe97f505f9c8728a47ea6a787750dbe834ec1fb42b98b3d703d827eda83e", size = 8879, upload-time = "2021-02-02T22:23:28.115Z" },
+]
 
 [[package]]
 name = "pygetwindow"

@@ -106,7 +106,7 @@ class HumanConfig:
     mouse_speed_max: float = 0.03  # 30ms
 
     # Tıklamalar arası minimum bekleme (saniye).
-    # Seri tıklama için cooldown düşürüldü.
+    # Seri tıklama için cooldown.
     click_cooldown: float = 0.15
 
 

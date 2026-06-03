@@ -85,7 +85,9 @@ class BotRunnerThread(threading.Thread):
                     time.sleep(sleep_time)
                     
         except Exception as e:
-            self.log_callback(f"Hata: {str(e)}")
+            import traceback
+            trace = traceback.format_exc()
+            self.log_callback(f"Hata: {str(e)}\n{trace}")
         finally:
             if self.capture:
                 self.capture.close()

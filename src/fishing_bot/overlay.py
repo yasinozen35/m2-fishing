@@ -105,8 +105,17 @@ class DebugOverlay:
         self._put_text(overlay, status, 10, h - 10, self.COLOR_TEXT, scale=0.5)
 
         # Pencerede göster.
-        cv2.imshow(self.WINDOW_NAME, overlay)
-        cv2.waitKey(1)
+        import platform
+        import threading
+        
+        # MacOS (Darwin), UI (cv2.imshow) güncellemelerinin SADECE ana thread'den yapılmasına izin verir.
+        # Botumuz BotRunnerThread (arka plan) içinde çalıştığı için Apple bunu bloklar ve Unknown C++ Exception fırlatır.
+        # Bu yüzden Mac'te arka plan threadindeysek cv2 penceresi açılmasını engelliyoruz.
+        is_mac_bg = platform.system() == "Darwin" and threading.current_thread() is not threading.main_thread()
+        
+        if not is_mac_bg:
+            cv2.imshow(self.WINDOW_NAME, overlay)
+            cv2.waitKey(1)
 
         return overlay
 

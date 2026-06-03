@@ -153,3 +153,41 @@ class Config:
 
     # FPS sınırı (ana döngü).
     target_fps: int = 30
+
+    def __post_init__(self):
+        """Uygulama başlatıldığında kalibrasyon dosyasını otomatik yükler."""
+        self.load_calibration()
+
+    def save_calibration(self, filepath="calibration.json"):
+        """Kalibrasyon ayarlarını json dosyasına kaydeder."""
+        import json
+        data = {
+            "capture_top": self.capture.top,
+            "capture_left": self.capture.left,
+            "capture_width": self.capture.width,
+            "capture_height": self.capture.height,
+            "armor_x": self.autobot.armor_x,
+            "armor_y": self.autobot.armor_y,
+        }
+        try:
+            with open(filepath, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4)
+        except Exception as e:
+            print(f"Kalibrasyon kaydedilemedi: {e}")
+
+    def load_calibration(self, filepath="calibration.json"):
+        """Kalibrasyon ayarlarını json dosyasından yükler."""
+        import json
+        import os
+        if os.path.exists(filepath):
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    self.capture.top = data.get("capture_top", self.capture.top)
+                    self.capture.left = data.get("capture_left", self.capture.left)
+                    self.capture.width = data.get("capture_width", self.capture.width)
+                    self.capture.height = data.get("capture_height", self.capture.height)
+                    self.autobot.armor_x = data.get("armor_x", self.autobot.armor_x)
+                    self.autobot.armor_y = data.get("armor_y", self.autobot.armor_y)
+            except Exception as e:
+                print(f"Kalibrasyon yuklenemedi: {e}")

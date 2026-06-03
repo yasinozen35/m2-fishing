@@ -256,7 +256,8 @@ class FishingBotGUI(ctk.CTk):
         from fishing_bot.main import run_calibration as rc
         self.log("Kalibrasyon baslatildi. Tam ekran goruntusunden oyunu secin.")
         rc(self.config)
-        self.log(f"Bolge ayarlandi: {self.config.capture.width}x{self.config.capture.height}")
+        self.config.save_calibration()
+        self.log(f"Bolge ayarlandi: {self.config.capture.width}x{self.config.capture.height} (Kaydedildi)")
         
     def start_armor_pos_selection(self):
         self.btn_set_armor.configure(state="disabled")
@@ -271,6 +272,7 @@ class FishingBotGUI(ctk.CTk):
         self.lbl_armor_pos.configure(text=f"Zırh Konumu: X={x}, Y={y}")
         self.btn_set_armor.configure(state="normal")
         self.switch_armor.select() # Otomatik aktif et
+        self.config.save_calibration()
         self.log(f"Zirh konumu kaydedildi: X={x}, Y={y}")
 
 def launch_gui():

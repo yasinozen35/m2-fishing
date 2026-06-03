@@ -32,16 +32,13 @@ if sys.platform == "win32":
         @staticmethod
         def click():
             ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-            # Bir insan farenin sol tıkına 10ms'de basıp çekemez. 
-            # Anti-Cheat sistemleri 50ms altını Makro/Bot sayıp prosesi 3 saniye DONDURARAK CEZALANDIRIR (Tarpit).
-            # Bunu aşmak için basılı tutma süresini organik yapıyoruz.
-            time.sleep(random.uniform(0.08, 0.15))
+            time.sleep(0.01)
             ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
             
         @staticmethod
         def rightClick():
             ctypes.windll.user32.mouse_event(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, 0)
-            time.sleep(random.uniform(0.08, 0.15))
+            time.sleep(0.01)
             ctypes.windll.user32.mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0)
             
         @staticmethod

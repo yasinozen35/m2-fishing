@@ -166,11 +166,7 @@ class Detector:
     ) -> Fish | None:
         """
         Balık siluetini tespit eder.
-
-        Hibrit yaklaşım:
-        1. HSV renk filtreleme ile koyu silueti ara.
-        2. Bulamazsa, adaptif eşikleme (grayscale) ile dene.
-
+        Sadece HSV renk filtreleme ile hızlı arama yapar.
         Sadece daire bölgesi içinde arama yapar (performans optimizasyonu).
         """
         cfg = self._fish_cfg
@@ -187,14 +183,8 @@ class Detector:
                 -1,
             )
 
-        # ── Yöntem 1: HSV renk filtreleme ──
-        fish = self._detect_fish_hsv(frame, mask_roi, cfg)
-        if fish is not None:
-            return fish
-
-        # ── Yöntem 2: Adaptif eşikleme (fallback) ──
-        fish = self._detect_fish_adaptive(frame, mask_roi, cfg)
-        return fish
+        # ── HSV renk filtreleme (Hızlı ve Güvenilir) ──
+        return self._detect_fish_hsv(frame, mask_roi, cfg)
 
     def _detect_fish_hsv(
         self,
@@ -213,39 +203,6 @@ class Detector:
         lower = np.array(cfg.hsv_lower, dtype=np.uint8)
         upper = np.array(cfg.hsv_upper, dtype=np.uint8)
         mask = cv2.inRange(hsv, lower, upper)
-
-        if mask_roi is not None:
-            mask = cv2.bitwise_and(mask, mask_roi)
-
-        return self._find_best_contour(mask, cfg)
-
-    def _detect_fish_adaptive(
-        self,
-        frame: np.ndarray,
-        mask_roi: np.ndarray | None,
-        cfg: FishDetectConfig,
-    ) -> Fish | None:
-        """
-        Adaptif eşikleme ile balık tespiti (fallback yöntemi).
-
-        Grayscale görüntüde medyan değerden belirgin şekilde
-        daha koyu olan bölgeleri balık olarak tespit eder.
-        """
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-        if mask_roi is not None:
-            # Sadece ROI bölgesinin medyanını al.
-            roi_pixels = gray[mask_roi > 0]
-            if len(roi_pixels) == 0:
-                return None
-            median_val = np.median(roi_pixels)
-        else:
-            median_val = np.median(gray)
-
-        # Medyandan belirgin şekilde daha koyu pikselleri bul.
-        # Eşik: medyan - 30 (koyu siluetler için).
-        threshold = max(0, int(median_val - 30))
-        mask = cv2.inRange(gray, 0, threshold)
 
         if mask_roi is not None:
             mask = cv2.bitwise_and(mask, mask_roi)

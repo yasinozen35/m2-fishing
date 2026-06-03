@@ -83,12 +83,10 @@ class HumanClicker:
         final_x = screen_x + jitter_x
         final_y = screen_y + jitter_y
 
-        # ── 4. Mouse'u doğal hızda hareket ettir (50-120ms) ──
-        move_duration = random.uniform(
-            self._human.mouse_speed_min,
-            self._human.mouse_speed_max,
-        )
-        gui_module.moveTo(final_x, final_y, duration=move_duration)
+        # ── 4. Mouse'u ANINDA hareket ettir ──
+        # Not: pydirectinput.moveTo içinde duration kullanmak Windows'ta thread kilitlenmesine (2-3sn donma) yol açar!
+        gui_module.moveTo(final_x, final_y)
+        time.sleep(0.01) # Oyunun mouse'u algılaması için çok kısa bir an
 
         # ── 5. Tıkla ──
         gui_module.click()
@@ -127,12 +125,11 @@ class HumanClicker:
         Belirtilen ekran koordinatına (Global koordinat) insan benzeri sağ tıklar.
         Zırh değişimi ve envanter yönetimi için kullanılır.
         """
-        # Mouse'u doğal hızda hareket ettir
-        move_duration = random.uniform(
-            self._human.mouse_speed_min,
-            self._human.mouse_speed_max,
-        )
-        gui_module.moveTo(screen_x, screen_y, duration=move_duration)
+        # Mouse'u anında hareket ettir
+        gui_module.moveTo(screen_x, screen_y)
+        
+        # Oyunun mouse'u algılaması için
+        time.sleep(random.uniform(0.05, 0.1))
         
         # Sağ tıkla
         gui_module.rightClick() if hasattr(gui_module, 'rightClick') else gui_module.click(button='right')
@@ -142,21 +139,16 @@ class HumanClicker:
         Belirtilen koordinattaki eşyayı sol tık ile tutup başka bir koordinata sürükler.
         (Çöpleri yere atmak için)
         """
-        # Başlangıca git
-        move_duration = random.uniform(
-            self._human.mouse_speed_min,
-            self._human.mouse_speed_max,
-        )
-        gui_module.moveTo(start_x, start_y, duration=move_duration)
+        # Başlangıca git (Işınlanma)
+        gui_module.moveTo(start_x, start_y)
         time.sleep(random.uniform(0.08, 0.15))
         
         # Sol tıkı basılı tut
         gui_module.mouseDown(button='left')
         time.sleep(random.uniform(0.1, 0.2)) # Tutma payı
         
-        # Sürükle (daha yavaş)
-        drag_duration = random.uniform(0.3, 0.6)
-        gui_module.moveTo(end_x, end_y, duration=drag_duration)
+        # Sürükle (Işınlanma)
+        gui_module.moveTo(end_x, end_y)
         time.sleep(random.uniform(0.1, 0.2))
         
         # Bırak

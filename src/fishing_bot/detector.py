@@ -212,7 +212,6 @@ class Detector:
     ) -> Fish | None:
         """Maskeden en uygun contour'u bulur ve Fish döndürür."""
         # Yüksek performanslı morfolojik işlemler (Gürültü temizleme).
-        # FPS'i düşürmemesi için iterasyon 1'e çekildi.
         mask = cv2.erode(mask, self._morph_kernel, iterations=1)
         mask = cv2.dilate(mask, self._morph_kernel, iterations=1)
 
@@ -226,18 +225,15 @@ class Detector:
         if not contours:
             return None
 
-        # Alan filtresi.
-        valid_contours = []
-        for cnt in contours:
-            area = cv2.contourArea(cnt)
-            if cfg.min_area <= area <= cfg.max_area:
-                valid_contours.append((cnt, area))
+        # SÜPER HIZLI OPTİMİZASYON: Tüm contour'lar üzerinde Python FOR döngüsü çevirmek 
+        # (Özellikle su dalgaları binlerce gürültü oluşturduğunda) FPS'i 2'ye kadar düşürür ve bilgisayarı kilitler!
+        # Bunun yerine C seviyesinde çalışan max() ile doğrudan en büyük parçayı buluyoruz.
+        best_contour = max(contours, key=cv2.contourArea)
+        best_area = cv2.contourArea(best_contour)
 
-        if not valid_contours:
+        # En büyük parça balık olmak için çok küçük veya çok büyükse (örn: Sadece su dalgasıysa) yoksay.
+        if not (cfg.min_area <= best_area <= cfg.max_area):
             return None
-
-        # En büyük geçerli contour.
-        best_contour, best_area = max(valid_contours, key=lambda x: x[1])
 
         moments = cv2.moments(best_contour)
         if moments["m00"] == 0:

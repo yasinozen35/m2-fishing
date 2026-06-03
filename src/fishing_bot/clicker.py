@@ -124,13 +124,17 @@ class HumanClicker:
         final_x = screen_x + jitter_x
         final_y = screen_y + jitter_y
 
-        # ── 4. Mouse'u ANINDA hareket ettir ──
-        # Not: pydirectinput.moveTo içinde duration kullanmak Windows'ta thread kilitlenmesine (2-3sn donma) yol açar!
-        gui_module.moveTo(final_x, final_y)
-        time.sleep(0.01) # Oyunun mouse'u algılaması için çok kısa bir an
-
-        # ── 5. Tıkla ──
-        gui_module.click()
+        # ── 4. Mouse'u ANINDA hareket ettir ve Tıkla (ASENKRON) ──
+        # Not: Anti-Cheat sistemleri sentetik tıklama aldıklarında o Thread'i 2-3 saniye dondurabilir (Tarpit tekniği).
+        # Botun FPS'inin 3'e düşmemesi (Ana görüntü işleme thread'inin donmaması) için
+        # Işınlanma ve tıklama işlemini anlık (Fire-and-Forget) bir Thread içinde atıyoruz!
+        def _async_click():
+            gui_module.moveTo(final_x, final_y)
+            time.sleep(0.01) # Mouse algılama süresi
+            gui_module.click()
+            
+        import threading
+        threading.Thread(target=_async_click, daemon=True).start()
 
         self._last_click_time = time.time()
         return True

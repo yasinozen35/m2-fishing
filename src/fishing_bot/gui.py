@@ -46,7 +46,9 @@ class BotRunnerThread(threading.Thread):
 
     def run(self):
         self.running = True
-        self.log_callback("Bot baslatiliyor...")
+        self.log_callback("Bot hazirlaniyor... LUTFEN 3 SANIYE ICINDE OYUNA TIKLAYIN!")
+        time.sleep(3)
+        self.log_callback("Bot basliyor...")
         
         try:
             self.capture = ScreenCapture(self.config.capture)
@@ -127,7 +129,7 @@ class FishingBotGUI(ctk.CTk):
         
         self.switch_debug = ctk.CTkSwitch(self.sidebar_frame, text="Debug Görünümü")
         self.switch_debug.grid(row=3, column=0, padx=20, pady=10)
-        self.switch_debug.select()
+        self.switch_debug.deselect() # Varsayılan olarak KAPALI (Focus çalmasını engellemek için)
         
         # ── Sağ İçerik (Sekmeler) ──
         self.tabview = ctk.CTkTabview(self, width=500)

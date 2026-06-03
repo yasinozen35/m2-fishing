@@ -75,7 +75,7 @@ class FishDetectConfig:
     # Koyu balık silueti için HSV aralığı.
     # Balık koyu/siyahımsı olduğu için düşük Value değeri kullanılır.
     hsv_lower: tuple = (0, 0, 0)        # H, S, V alt sınır
-    hsv_upper: tuple = (180, 255, 100)  # H, S, V üst sınır
+    hsv_upper: tuple = (180, 255, 120)  # H, S, V üst sınır
 
     # Contour alan filtresi (piksel²).
     # Çok küçük contour'lar gürültü, çok büyükler arka plan.

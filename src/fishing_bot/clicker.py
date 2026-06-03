@@ -12,15 +12,56 @@ import time
 
 import pyautogui
 
-# Sadece Windows'ta pydirectinput kullan
+# Windows'ta PyDirectInput bile bazen oyun içi kilitlenmelere ve donmalara yol açıyor.
+# Bu yüzden en düşük seviyeli donanım API'sini (Ctypes Win32) kendimiz yazıyoruz!
 if sys.platform == "win32":
-    try:
-        import pydirectinput
-        gui_module = pydirectinput
-        pydirectinput.FAILSAFE = True
-        pydirectinput.PAUSE = 0.0
-    except ImportError:
-        gui_module = pyautogui
+    import ctypes
+
+    # Win32 Flag sabitleri
+    MOUSEEVENTF_LEFTDOWN = 0x0002
+    MOUSEEVENTF_LEFTUP = 0x0004
+    MOUSEEVENTF_RIGHTDOWN = 0x0008
+    MOUSEEVENTF_RIGHTUP = 0x0010
+
+    class Win32Clicker:
+        """PyAutoGUI ve PyDirectInput'un yerini alacak süper hızlı Native Windows Tıklayıcı."""
+        @staticmethod
+        def moveTo(x, y):
+            ctypes.windll.user32.SetCursorPos(int(x), int(y))
+            
+        @staticmethod
+        def click():
+            ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+            time.sleep(0.01)
+            ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+            
+        @staticmethod
+        def rightClick():
+            ctypes.windll.user32.mouse_event(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, 0)
+            time.sleep(0.01)
+            ctypes.windll.user32.mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0)
+            
+        @staticmethod
+        def mouseDown(button='left'):
+            flag = MOUSEEVENTF_LEFTDOWN if button == 'left' else MOUSEEVENTF_RIGHTDOWN
+            ctypes.windll.user32.mouse_event(flag, 0, 0, 0, 0)
+            
+        @staticmethod
+        def mouseUp(button='left'):
+            flag = MOUSEEVENTF_LEFTUP if button == 'left' else MOUSEEVENTF_RIGHTUP
+            ctypes.windll.user32.mouse_event(flag, 0, 0, 0, 0)
+            
+        @staticmethod
+        def keyDown(key):
+            # Basit klavye olayları için hala pyautogui kullanılabilir veya es geçilebilir.
+            # Tuş vuruşlarında donma yaşanmıyor.
+            pyautogui.keyDown(key)
+            
+        @staticmethod
+        def keyUp(key):
+            pyautogui.keyUp(key)
+
+    gui_module = Win32Clicker()
 else:
     gui_module = pyautogui
 

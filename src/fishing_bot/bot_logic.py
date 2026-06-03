@@ -1,0 +1,169 @@
+"""
+bot_logic.py — Tam otonom balık botu durum makinesi (State Machine).
+
+Oyun döngüsünü yönetir:
+1. Yem tak (PREPARE)
+2. Zırh değiştir (PREPARE - opsiyonel)
+3. Olta at (CAST)
+4. Balık bekle (WAITING)
+5. Mini-oyunu oyna (MINIGAME)
+6. Bekle ve başa dön (POST_CATCH)
+"""
+
+import time
+from enum import Enum, auto
+
+from fishing_bot.config import AutoBotConfig
+from fishing_bot.clicker import HumanClicker
+from fishing_bot.detector import DetectionResult
+
+
+class BotState(Enum):
+    """Botun mevcut durumu."""
+    IDLE = auto()          # Çalışmıyor / duraklatıldı
+    PREPARE = auto()       # Yem takma ve zırh değiştirme
+    CAST = auto()          # Oltayı suya atma
+    WAITING = auto()       # Dairenin belirmesini bekleme
+    MINIGAME = auto()      # Balık yakalama mini-oyunu (3 tık)
+    POST_CATCH = auto()    # Yakaladıktan sonra bekleme / envanter yönetimi
+
+
+class BotLogic:
+    """Otonom bot döngüsünü yöneten sınıf."""
+
+    def __init__(self, config: AutoBotConfig, clicker: HumanClicker):
+        self._cfg = config
+        self._clicker = clicker
+        
+        self.state = BotState.IDLE
+        self._state_start_time = 0.0
+        
+        self.successful_catches = 0
+        self.total_casts = 0
+        self._click_count_in_minigame = 0
+
+    def start(self) -> None:
+        """Döngüyü başlatır."""
+        self.state = BotState.PREPARE
+        self._state_start_time = time.time()
+        self._click_count_in_minigame = 0
+
+    def stop(self) -> None:
+        """Döngüyü durdurur."""
+        self.state = BotState.IDLE
+
+    def update(self, detection: DetectionResult, frame=None, detector=None) -> tuple[bool, str]:
+        """
+        Her karede durum makinesini günceller.
+        
+        Args:
+            detection: Ekran görüntüsünden tespit sonuçları.
+            frame: Tam ekran görüntüsü (opsiyonel).
+            detector: Detector objesi (opsiyonel, envanter taramak için).
+            
+        Returns:
+            (clicked, status_message): Bu update'te tıklama yapıldı mı, mevcut durum stringi.
+        """
+        now = time.time()
+        elapsed = now - self._state_start_time
+        clicked = False
+        status_msg = ""
+
+        if self.state == BotState.IDLE:
+            status_msg = "Bot Durduruldu"
+
+        elif self.state == BotState.PREPARE:
+            # 1. Yem tak
+            bait_clicked = False
+            # Ekranda (envanterde) minik balık var mı kontrol et
+            if frame is not None and detector is not None:
+                baits = detector.detect_inventory_items(frame, item_type="bait")
+                if baits:
+                    bx, by = baits[0]
+                    self._clicker.right_click_at(bx, by)
+                    bait_clicked = True
+                    status_msg = "Minik Balik yeme takildi"
+                    
+            if not bait_clicked:
+                self._clicker.press_key(self._cfg.key_bait)
+                status_msg = "Hazirlik: Normal Yem takildi"
+                
+            time.sleep(self._cfg.delay_after_bait)
+            
+            # 2. Zırh değiştir (opsiyonel trick - Animasyon İptali)
+            # Metin2'de zırh hızlı slota atanamaz. Envanterde belirlenen (x,y) koordinatına sağ tıklanır.
+            # Çıkar ve geri tak yapmak için arka arkaya iki kez sağ tık atılır.
+            if self._cfg.use_armor_trick and self._cfg.armor_x > 0 and self._cfg.armor_y > 0:
+                # Zırhı çıkar
+                self._clicker.right_click_at(self._cfg.armor_x, self._cfg.armor_y)
+                time.sleep(0.15)
+                # Zırhı giy
+                self._clicker.right_click_at(self._cfg.armor_x, self._cfg.armor_y)
+                time.sleep(self._cfg.delay_after_armor)
+                
+            self._transition_to(BotState.CAST)
+            status_msg = "Hazirlik: Yem takildi"
+
+        elif self.state == BotState.CAST:
+            # Oltayı at
+            self._clicker.press_key(self._cfg.key_fish)
+            self.total_casts += 1
+            
+            # Olta atma animasyonu beklemesi
+            time.sleep(self._cfg.delay_after_cast)
+            
+            self._transition_to(BotState.WAITING)
+            status_msg = "Olta atildi"
+
+        elif self.state == BotState.WAITING:
+            status_msg = f"Balik bekleniyor... ({int(elapsed)}s)"
+            
+            # Daire (mini-oyun) çıktıysa minigame state'ine geç
+            if detection.circle is not None:
+                self._transition_to(BotState.MINIGAME)
+                
+            # Timeout (balık vurmadıysa veya kaçtıysa)
+            elif elapsed > self._cfg.timeout_waiting_fish:
+                self._transition_to(BotState.POST_CATCH)
+
+        elif self.state == BotState.MINIGAME:
+            status_msg = f"MINIGAME: {self._click_count_in_minigame}/3 Tik"
+            
+            # Daire kaybolduysa oyun bitti
+            if detection.circle is None:
+                self._transition_to(BotState.POST_CATCH)
+            else:
+                # Balık içerdeyse tıkla
+                if detection.is_fish_inside and detection.fish is not None:
+                    if self._clicker.is_ready:
+                        # Balığa tıkla
+                        if self._clicker.click_at(detection.fish.center_x, detection.fish.center_y):
+                            clicked = True
+                            self._click_count_in_minigame += 1
+                            
+                            # 3 tık başarılı olduysa skoru artır
+                            if self._click_count_in_minigame == 3:
+                                self.successful_catches += 1
+                                # 3 tık atıldı, minigame bitti sayılır
+                                # Oyun daireyi kapatacaktır, biz POST_CATCH'e geçebiliriz
+                                self._transition_to(BotState.POST_CATCH)
+
+        elif self.state == BotState.POST_CATCH:
+            status_msg = f"Toparlaniyor... ({int(self._cfg.delay_after_catch - elapsed)}s)"
+            
+            # Animasyon beklemesi ve envanter yönetimi
+            if elapsed > self._cfg.delay_after_catch:
+                # TODO: Envanter temizleme işlemi (auto_open_fishes) buraya eklenecek
+                
+                # Başa dön
+                self._transition_to(BotState.PREPARE)
+
+        return clicked, status_msg
+
+    def _transition_to(self, new_state: BotState) -> None:
+        """Durum değiştirir ve zamanlayıcıyı sıfırlar."""
+        self.state = new_state
+        self._state_start_time = time.time()
+        
+        if new_state == BotState.MINIGAME:
+            self._click_count_in_minigame = 0

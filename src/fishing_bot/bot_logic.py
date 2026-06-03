@@ -10,6 +10,7 @@ Oyun döngüsünü yönetir:
 6. Bekle ve başa dön (POST_CATCH)
 """
 
+import random
 import time
 from enum import Enum, auto
 
@@ -26,6 +27,7 @@ class BotState(Enum):
     WAITING = auto()       # Dairenin belirmesini bekleme
     MINIGAME = auto()      # Balık yakalama mini-oyunu (3 tık)
     POST_CATCH = auto()    # Yakaladıktan sonra bekleme / envanter yönetimi
+    FATIGUE_BREAK = auto() # İnsan yorulması, AFK bekleme modu
 
 
 class BotLogic:
@@ -44,12 +46,21 @@ class BotLogic:
         self._click_count_in_minigame = 0
         self._prepare_action_done = False
         self._postcatch_action_done = False
+        
+        self._next_fatigue_time = 0.0
+        self._fatigue_duration = 0.0
 
     def start(self) -> None:
         """Döngüyü başlatır."""
         self.state = BotState.PREPARE
         self._state_start_time = time.time()
         self._click_count_in_minigame = 0
+        
+        if self._cfg.use_fatigue_system:
+            self._next_fatigue_time = time.time() + random.uniform(
+                self._cfg.fatigue_interval_min, 
+                self._cfg.fatigue_interval_max
+            )
 
     def stop(self) -> None:
         """Döngüyü durdurur."""
@@ -163,9 +174,28 @@ class BotLogic:
             if not getattr(self, "_postcatch_action_done", False):
                 self._postcatch_action_done = True
                 
-                # Eğer auto_open_fishes açıksa, yakalama sonrası envanteri tara ve aç
+                full_frame = None
+                
+                # Çöpleri Yere At
+                if self._cfg.auto_drop_trash and self._capture is not None and detector is not None:
+                    if full_frame is None:
+                        full_frame = self._capture.grab_full_frame()
+                        
+                    trashes = detector.detect_inventory_items(full_frame, item_type="trash")
+                    if trashes:
+                        status_msg = f"Envanterdeki {len(trashes)} cop atiliyor..."
+                        for tx, ty in trashes:
+                            # Sürükle bırak (hedef x=50, y=50 oyunun köşesi veya dışı)
+                            self._clicker.drag_and_drop(tx, ty, 50, 50)
+                            # 'Yere at' onay diyalogu için Enter bas.
+                            self._clicker.press_key('enter')
+                            time.sleep(0.5)
+                
+                # Balıkları aç
                 if self._cfg.auto_open_fishes and self._capture is not None and detector is not None:
-                    full_frame = self._capture.grab_full_frame()
+                    if full_frame is None:
+                        full_frame = self._capture.grab_full_frame()
+                        
                     fishes = detector.detect_inventory_items(full_frame, item_type="fish")
                     if fishes:
                         status_msg = f"Envanterde {len(fishes)} balik aciliyor..."
@@ -175,7 +205,26 @@ class BotLogic:
             
             # Animasyon beklemesi
             if elapsed > self._cfg.delay_after_catch:
-                # Başa dön
+                # Yorulma (Fatigue) kontrolü
+                if self._cfg.use_fatigue_system and time.time() > self._next_fatigue_time:
+                    self._fatigue_duration = random.uniform(
+                        self._cfg.fatigue_duration_min, 
+                        self._cfg.fatigue_duration_max
+                    )
+                    self._transition_to(BotState.FATIGUE_BREAK)
+                else:
+                    # Başa dön
+                    self._transition_to(BotState.PREPARE)
+                    
+        elif self.state == BotState.FATIGUE_BREAK:
+            remaining = self._fatigue_duration - elapsed
+            status_msg = f"Cay Molasi ☕ (Kalan: {int(remaining)}s)"
+            
+            if remaining <= 0:
+                self._next_fatigue_time = time.time() + random.uniform(
+                    self._cfg.fatigue_interval_min, 
+                    self._cfg.fatigue_interval_max
+                )
                 self._transition_to(BotState.PREPARE)
 
         return clicked, status_msg

@@ -198,6 +198,17 @@ class FishingBotGUI(ctk.CTk):
         
         ctk.CTkLabel(tab, text="Not: Butona basınca 3 saniye içinde mouse'u\nenvanterdeki zırhın üstüne götürün.", text_color="gray").pack(pady=5)
 
+        # Otonom İnsanlaştırma ve Çöp Atma
+        ctk.CTkLabel(tab, text="Yapay Zeka & Organik Davranış", font=ctk.CTkFont(weight="bold")).pack(pady=(15, 5))
+        
+        self.switch_fatigue = ctk.CTkSwitch(tab, text="İnsan Yorulması (Mola Sistemi) Aktif")
+        self.switch_fatigue.pack(pady=5)
+        self.switch_fatigue.select()
+        
+        self.switch_trash = ctk.CTkSwitch(tab, text="Otomatik Çöpleri Yere At (Trash Drop)")
+        self.switch_trash.pack(pady=5)
+        self.switch_trash.select()
+
     # ── Metodlar ──
     
     def log(self, message: str):
@@ -227,6 +238,8 @@ class FishingBotGUI(ctk.CTk):
             self.config.autobot.key_bait = self.entry_bait.get()
             self.config.autobot.key_fish = self.entry_fish.get()
             self.config.autobot.use_armor_trick = self.switch_armor.get() == 1
+            self.config.autobot.use_fatigue_system = self.switch_fatigue.get() == 1
+            self.config.autobot.auto_drop_trash = self.switch_trash.get() == 1
             
             # Başlat
             self.btn_start.configure(text="⏹ Durdur", fg_color="red", hover_color="darkred")

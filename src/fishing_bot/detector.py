@@ -65,6 +65,7 @@ class Detector:
         # Envanter template'leri
         self._fish_templates = []
         self._bait_templates = []
+        self._trash_templates = []
         self._load_templates()
 
     def _load_templates(self) -> None:
@@ -79,6 +80,8 @@ class Detector:
             if tpl is not None:
                 if filename.startswith("bait_"):
                     self._bait_templates.append(tpl)
+                elif filename.startswith("trash_"):
+                    self._trash_templates.append(tpl)
                 else:
                     self._fish_templates.append(tpl)
 
@@ -337,7 +340,12 @@ class Detector:
         Returns:
             list[tuple[int, int]]: Bulunan itemlerin merkez koordinatları [(x, y), ...]
         """
-        templates = self._bait_templates if item_type == "bait" else self._fish_templates
+        if item_type == "bait":
+            templates = self._bait_templates
+        elif item_type == "trash":
+            templates = self._trash_templates
+        else:
+            templates = self._fish_templates
         
         if not templates:
             return []

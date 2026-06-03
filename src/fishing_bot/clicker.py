@@ -134,8 +134,33 @@ class HumanClicker:
         )
         gui_module.moveTo(screen_x, screen_y, duration=move_duration)
         
-        # Ufak bir gecikme
-        time.sleep(random.uniform(0.05, 0.1))
-        
         # Sağ tıkla
         gui_module.rightClick() if hasattr(gui_module, 'rightClick') else gui_module.click(button='right')
+
+    def drag_and_drop(self, start_x: int, start_y: int, end_x: int, end_y: int) -> None:
+        """
+        Belirtilen koordinattaki eşyayı sol tık ile tutup başka bir koordinata sürükler.
+        (Çöpleri yere atmak için)
+        """
+        # Başlangıca git
+        move_duration = random.uniform(
+            self._human.mouse_speed_min,
+            self._human.mouse_speed_max,
+        )
+        gui_module.moveTo(start_x, start_y, duration=move_duration)
+        time.sleep(random.uniform(0.08, 0.15))
+        
+        # Sol tıkı basılı tut
+        gui_module.mouseDown(button='left')
+        time.sleep(random.uniform(0.1, 0.2)) # Tutma payı
+        
+        # Sürükle (daha yavaş)
+        drag_duration = random.uniform(0.3, 0.6)
+        gui_module.moveTo(end_x, end_y, duration=drag_duration)
+        time.sleep(random.uniform(0.1, 0.2))
+        
+        # Bırak
+        gui_module.mouseUp(button='left')
+        
+        # Onay penceresinin açılması için bekle
+        time.sleep(random.uniform(0.4, 0.7))

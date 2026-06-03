@@ -121,6 +121,14 @@ class AutoBotConfig:
     armor_y: int = 0
     use_armor_trick: bool = False # Zırh çıkar-tak aktif mi?
     auto_open_fishes: bool = True # Yakalanan balıklar otomatik açılsın mı?
+    auto_drop_trash: bool = True  # Çöpler yere atılsın mı?
+
+    # İnsan Yorulması (Fatigue System)
+    use_fatigue_system: bool = True
+    fatigue_interval_min: float = 40.0 * 60.0  # Dakika cinsinden minimum çalışma süresi (saniye)
+    fatigue_interval_max: float = 75.0 * 60.0  # Dakika cinsinden maksimum çalışma süresi (saniye)
+    fatigue_duration_min: float = 4.0 * 60.0   # Minimum mola süresi (saniye)
+    fatigue_duration_max: float = 12.0 * 60.0  # Maksimum mola süresi (saniye)
 
     # Döngü zamanlamaları (saniye)
     delay_after_bait: float = 0.5    # Yem taktıktan sonra bekleme

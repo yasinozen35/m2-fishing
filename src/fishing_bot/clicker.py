@@ -53,13 +53,20 @@ if sys.platform == "win32":
             
         @staticmethod
         def keyDown(key):
-            # Basit klavye olayları için hala pyautogui kullanılabilir veya es geçilebilir.
-            # Tuş vuruşlarında donma yaşanmıyor.
-            pyautogui.keyDown(key)
+            # DirectX oyunlarında klavye basışları için PyAutoGUI çalışmaz.
+            try:
+                import pydirectinput
+                pydirectinput.keyDown(key)
+            except:
+                pyautogui.keyDown(key)
             
         @staticmethod
         def keyUp(key):
-            pyautogui.keyUp(key)
+            try:
+                import pydirectinput
+                pydirectinput.keyUp(key)
+            except:
+                pyautogui.keyUp(key)
 
     gui_module = Win32Clicker()
 else:
@@ -158,8 +165,9 @@ class HumanClicker:
         Args:
             key: Basılacak tuş (ör: '1', 'space', 'i')
         """
-        # İnsan tuşa anında basıp bırakamaz, ufak bir gecikme olur.
-        hold_time = random.uniform(0.05, 0.12)
+        # DirectX oyunları (Metin2) klavye tuşlarını algılamak için
+        # tuşa en az 0.15 - 0.3 saniye arası basılı tutulmasını ister!
+        hold_time = random.uniform(0.15, 0.3)
         
         gui_module.keyDown(key)
         time.sleep(hold_time)

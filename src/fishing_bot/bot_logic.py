@@ -31,9 +31,10 @@ class BotState(Enum):
 class BotLogic:
     """Otonom bot döngüsünü yöneten sınıf."""
 
-    def __init__(self, config: AutoBotConfig, clicker: HumanClicker):
+    def __init__(self, config: AutoBotConfig, clicker: HumanClicker, capture=None):
         self._cfg = config
         self._clicker = clicker
+        self._capture = capture
         
         self.state = BotState.IDLE
         self._state_start_time = 0.0
@@ -41,6 +42,8 @@ class BotLogic:
         self.successful_catches = 0
         self.total_casts = 0
         self._click_count_in_minigame = 0
+        self._prepare_action_done = False
+        self._postcatch_action_done = False
 
     def start(self) -> None:
         """Döngüyü başlatır."""
@@ -57,8 +60,8 @@ class BotLogic:
         Her karede durum makinesini günceller.
         
         Args:
+        Args:
             detection: Ekran görüntüsünden tespit sonuçları.
-            frame: Tam ekran görüntüsü (opsiyonel).
             detector: Detector objesi (opsiyonel, envanter taramak için).
             
         Returns:
@@ -73,20 +76,25 @@ class BotLogic:
             status_msg = "Bot Durduruldu"
 
         elif self.state == BotState.PREPARE:
-            # 1. Yem tak
-            bait_clicked = False
-            # Ekranda (envanterde) minik balık var mı kontrol et
-            if frame is not None and detector is not None:
-                baits = detector.detect_inventory_items(frame, item_type="bait")
-                if baits:
-                    bx, by = baits[0]
-                    self._clicker.right_click_at(bx, by)
-                    bait_clicked = True
-                    status_msg = "Minik Balik yeme takildi"
-                    
-            if not bait_clicked:
-                self._clicker.press_key(self._cfg.key_bait)
-                status_msg = "Hazirlik: Normal Yem takildi"
+            # Sadece bu duruma ilk girildiğinde bir kere çalışmalı
+            if not getattr(self, "_prepare_action_done", False):
+                self._prepare_action_done = True
+                
+                # 1. Yem tak
+                bait_clicked = False
+                # Ekranda (envanterde) minik balık var mı kontrol et
+                if self._capture is not None and detector is not None:
+                    full_frame = self._capture.grab_full_frame()
+                    baits = detector.detect_inventory_items(full_frame, item_type="bait")
+                    if baits:
+                        bx, by = baits[0]
+                        self._clicker.right_click_at(bx, by)
+                        bait_clicked = True
+                        status_msg = "Minik Balik yeme takildi"
+                        
+                if not bait_clicked:
+                    self._clicker.press_key(self._cfg.key_bait)
+                    status_msg = "Hazirlik: Normal Yem takildi"
                 
             time.sleep(self._cfg.delay_after_bait)
             
@@ -102,7 +110,8 @@ class BotLogic:
                 time.sleep(self._cfg.delay_after_armor)
                 
             self._transition_to(BotState.CAST)
-            status_msg = "Hazirlik: Yem takildi"
+            if not status_msg:
+                status_msg = "Hazirlik: Yem takildi"
 
         elif self.state == BotState.CAST:
             # Oltayı at
@@ -151,10 +160,21 @@ class BotLogic:
         elif self.state == BotState.POST_CATCH:
             status_msg = f"Toparlaniyor... ({int(self._cfg.delay_after_catch - elapsed)}s)"
             
-            # Animasyon beklemesi ve envanter yönetimi
-            if elapsed > self._cfg.delay_after_catch:
-                # TODO: Envanter temizleme işlemi (auto_open_fishes) buraya eklenecek
+            if not getattr(self, "_postcatch_action_done", False):
+                self._postcatch_action_done = True
                 
+                # Eğer auto_open_fishes açıksa, yakalama sonrası envanteri tara ve aç
+                if self._cfg.auto_open_fishes and self._capture is not None and detector is not None:
+                    full_frame = self._capture.grab_full_frame()
+                    fishes = detector.detect_inventory_items(full_frame, item_type="fish")
+                    if fishes:
+                        status_msg = f"Envanterde {len(fishes)} balik aciliyor..."
+                        for fx, fy in fishes:
+                            self._clicker.right_click_at(fx, fy)
+                            time.sleep(0.1)
+            
+            # Animasyon beklemesi
+            if elapsed > self._cfg.delay_after_catch:
                 # Başa dön
                 self._transition_to(BotState.PREPARE)
 
@@ -167,3 +187,7 @@ class BotLogic:
         
         if new_state == BotState.MINIGAME:
             self._click_count_in_minigame = 0
+        elif new_state == BotState.PREPARE:
+            self._prepare_action_done = False
+        elif new_state == BotState.POST_CATCH:
+            self._postcatch_action_done = False

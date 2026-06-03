@@ -54,7 +54,7 @@ class BotRunnerThread(threading.Thread):
             self.clicker = HumanClicker(self.config.human, self.config.capture)
             self.overlay = DebugOverlay() if self.config.debug_mode else None
             
-            self.bot_logic = BotLogic(self.config.autobot, self.clicker)
+            self.bot_logic = BotLogic(self.config.autobot, self.clicker, self.capture)
             self.bot_logic.start()
             
             self.log_callback("Bot calisiyor! (Otonom Mod)")
@@ -67,18 +67,8 @@ class BotRunnerThread(threading.Thread):
                 frame = self.capture.grab_frame()
                 result = self.detector.detect(frame)
                 
-                clicked, status_msg = self.bot_logic.update(result, frame=frame, detector=self.detector)
+                clicked, status_msg = self.bot_logic.update(result, detector=self.detector)
                 
-                # Eğer auto_open_fishes açıksa ve bot POST_CATCH beklemesindeyse envanter tara
-                if self.config.autobot.auto_open_fishes and self.bot_logic.state == BotState.POST_CATCH:
-                    # Envanterde balık bulup tıkla (Örn: İstiridye atacak balıklar)
-                    fishes = self.detector.detect_inventory_items(frame, item_type="fish")
-                    if fishes:
-                        status_msg += f" (Envanterde {len(fishes)} balik aciliyor...)"
-                        for fx, fy in fishes:
-                            self.clicker.right_click_at(fx, fy)
-                            time.sleep(0.1) # Çok hızlı açmaması için ufak bekleme
-                            
                 # UI'ı güncelle (Çok sık olmaması için log yerine sadece status'u güncelle)
                 self.status_callback(
                     status_msg, 

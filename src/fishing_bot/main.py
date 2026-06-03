@@ -193,7 +193,7 @@ def main() -> None:
     overlay = DebugOverlay() if config.debug_mode else None
     
     # Autobot mantığını başlat
-    bot_logic = BotLogic(config.autobot, clicker) if args.autobot else None
+    bot_logic = BotLogic(config.autobot, clicker, capture) if args.autobot else None
     if bot_logic:
         bot_logic.start()
 
@@ -223,19 +223,9 @@ def main() -> None:
             # 3. Otonom veya Klasik Mod Mantığı
             if bot_logic:
                 # OTONOM MOD
-                clicked, status_msg = bot_logic.update(result, frame=frame, detector=detector)
+                clicked, status_msg = bot_logic.update(result, detector=detector)
                 if clicked:
                     click_count += 1
-                    
-                # Eğer auto_open_fishes açıksa ve bot POST_CATCH beklemesindeyse envanter tara
-                if config.autobot.auto_open_fishes and bot_logic.state == BotState.POST_CATCH:
-                    # Envanterde balık bulup tıkla
-                    fishes = detector.detect_inventory_items(frame, item_type="fish")
-                    if fishes:
-                        status_msg += f" (Envanterde {len(fishes)} balik aciliyor...)"
-                        for fx, fy in fishes:
-                            clicker.right_click_at(fx, fy)
-                            time.sleep(0.1)
             else:
                 # KLASIK MOD
                 if result.is_fish_inside and result.fish is not None:

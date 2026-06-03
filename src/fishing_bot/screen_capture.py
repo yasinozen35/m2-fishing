@@ -54,6 +54,17 @@ class ScreenCapture:
         frame = np.array(raw, dtype=np.uint8)
         return frame[:, :, :3]  # BGRA → BGR (alpha kanalını at)
 
+    def grab_full_frame(self) -> np.ndarray:
+        """
+        Tüm ekranı yakalar ve BGR formatında döndürür.
+        (Envanter araması gibi mutlak koordinat gereken durumlar için kullanılır).
+        """
+        # monitors[1] ana monitörü temsil eder
+        monitor = self._sct.monitors[1]
+        raw = self._sct.grab(monitor)
+        frame = np.array(raw, dtype=np.uint8)
+        return frame[:, :, :3]
+
     def close(self) -> None:
         """Kaynakları serbest bırakır."""
         self._sct.close()

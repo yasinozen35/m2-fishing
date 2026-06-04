@@ -194,8 +194,8 @@ class Detector:
         else:
             mean_val = np.mean(gray)
 
-        # Ortalamadan 25 birim daha koyu pikselleri (gölgeyi) balık olarak kabul et.
-        threshold = max(0, int(mean_val - 25))
+        # Ortalamadan N birim daha koyu pikselleri (gölgeyi/balığı) kabul et.
+        threshold = max(0, int(mean_val - cfg.threshold_offset))
         mask = cv2.inRange(gray, 0, threshold)
 
         if mask_roi is not None:

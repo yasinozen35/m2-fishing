@@ -162,6 +162,21 @@ class BotLogic:
                         if self._clicker.click_at(detection.fish.center_x, detection.fish.center_y):
                             clicked = True
                             self._click_count_in_minigame += 1
+                            
+                            # Hata ayıklama için tıklandığı anın resmini kaydet
+                            if hasattr(self, '_capture') and self._capture:
+                                import cv2
+                                import os
+                                debug_dir = os.path.join(os.path.dirname(__file__), "..", "..", "debug_clicks")
+                                os.makedirs(debug_dir, exist_ok=True)
+                                
+                                # Anlık kareyi al (Hafif gecikmeli olabilir ama fikir verir)
+                                frame = self._capture.grab_frame()
+                                if frame is not None and detection.fish is not None:
+                                    cv2.drawContours(frame, [detection.fish.contour], -1, (0, 0, 255), 2)
+                                    cv2.circle(frame, (detection.fish.center_x, detection.fish.center_y), 5, (0, 255, 0), -1)
+                                    filename = os.path.join(debug_dir, f"click_{self.successful_catches}_{self._click_count_in_minigame}.jpg")
+                                    cv2.imwrite(filename, frame)
 
         elif self.state == BotState.POST_CATCH:
             status_msg = f"Toparlaniyor... ({int(self._cfg.delay_after_catch - elapsed)}s)"

@@ -82,6 +82,11 @@ class FishDetectConfig:
     min_area: int = 50
     max_area: int = 5000
 
+    # Balık koyuluğu eşik değeri (Gölge vs Balık ayırımı).
+    # Suyun ortalama renginden ne kadar koyu olan pikselleri balık olarak kabul edeceğini belirler.
+    # 25 çok hassastır (dalgaları balık sanır), 50-70 arası idealdir.
+    threshold_offset: int = 40
+
     # Morfolojik işlem kernel boyutu.
     morph_kernel_size: int = 3
 

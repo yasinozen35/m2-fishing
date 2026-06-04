@@ -125,13 +125,15 @@ class BotLogic:
                 status_msg = "Hazirlik: Yem takildi"
 
         elif self.state == BotState.CAST:
-            # Oltayı at
-            self._clicker.press_key(self._cfg.key_fish)
+            # Oltayı at - oyunun yemi algılaması için mini gecikme
+            time.sleep(0.05)
+            # Space tuşuna daha uzun bas (oyun bazen kısa basışı kaçırıyor)
+            self._clicker.press_key(self._cfg.key_fish, hold_min=0.12, hold_max=0.25)
             self.total_casts += 1
-            
+
             # Olta atma animasyonu beklemesi
             time.sleep(self._cfg.delay_after_cast)
-            
+
             self._transition_to(BotState.WAITING)
             status_msg = "Olta atildi"
 
@@ -157,68 +159,55 @@ class BotLogic:
             else:
                 # Balık içerdeyse ve cooldown bittiyse tıkla
                 if detection.is_fish_inside and detection.fish is not None:
-                    
+
                     # ── HIZ VE TAHMİN (PREDICTION) ALGORİTMASI ──
                     current_x = detection.fish.center_x
                     current_y = detection.fish.center_y
-                    target_x = current_x
-                    target_y = current_y
                     now = time.time()
-                    
-                    last_pos = getattr(self, "_last_fish_pos", None)
-                    last_time = getattr(self, "_last_fish_time", 0.0)
-                    
-                    self._last_fish_pos = (current_x, current_y)
-                    self._last_fish_time = now
 
-                    # İlk karede hız ölçemeyeceğimiz için tıklamıyoruz, 
-                    if last_pos is None:
-                        return False, status_msg
-                        
-                    dt = now - last_time
-                    if 0 < dt < 0.2: # Sadece çok yeni (son 200ms) verilerle tahmin yap
-                        vx = (current_x - last_pos[0]) / dt
-                        vy = (current_y - last_pos[1]) / dt
-                        
-                        # Botun tepki+gitme süresi tahmini ~0.1 saniye
-                        look_ahead_time = 0.1
-                        target_x = int(current_x + vx * look_ahead_time)
-                        target_y = int(current_y + vy * look_ahead_time)
-                    else:
-                        # Veri çok eskiyse yine tıklama, vektör oluştur
-                        return False, status_msg
-
-                    # STRATEJİ: Balık dairenin kenarındayken (tahta çerçevedeyken) tıklama.
-                    # Suyun içine girdiğinden emin olduğumuzda (yarıçapın %82'si içine girdiğinde) tıkla.
-                    # 0.65 çok dardı ve balığın merkeze gelmesini beklerken süre bitiyordu!
+                    # Safe zone kontrolü (önce bunu yap, dışarıdaysa tıklama)
                     import math
                     dist_to_center = math.hypot(current_x - detection.circle.center_x, current_y - detection.circle.center_y)
                     safe_radius = detection.circle.radius * 0.82
-                    
+
+                    # Pozisyonu her zaman kaydet (velocity tracking için)
+                    last_pos = getattr(self, "_last_fish_pos", None)
+                    last_time = getattr(self, "_last_fish_time", 0.0)
+                    self._last_fish_pos = (current_x, current_y)
+                    self._last_fish_time = now
+
                     if dist_to_center > safe_radius:
-                        # Balık hala kenarlarda, izlemeye devam et ama tıklama
                         return False, status_msg
+
+                    target_x = current_x
+                    target_y = current_y
+
+                    # Hız verisi varsa tahmin yap, yoksa/yetersizse raw pozisyona tıkla
+                    if last_pos is not None:
+                        dt = now - last_time
+                        if 0 < dt < 0.2:
+                            vx = (current_x - last_pos[0]) / dt
+                            vy = (current_y - last_pos[1]) / dt
+                            speed = math.hypot(vx, vy)
+
+                            # 1. Aşama: Pipeline gecikmesi için ileri tahmin (70ms - e-sporcu refleks)
+                            look_ahead_time = 0.07
+                            target_x = int(current_x + vx * look_ahead_time)
+                            target_y = int(current_y + vy * look_ahead_time)
+
+                            # 2. Aşama: Balığın hareket yönünde önüne ekstra lead (burnuna tıkla)
+                            if speed > 15:
+                                lead_px = 8
+                                target_x = int(target_x + (vx / speed) * lead_px)
+                                target_y = int(target_y + (vy / speed) * lead_px)
+                        # else: dt geçersiz → raw pozisyona tıkla (target_x/y zaten current)
+                    # else: ilk kare → raw pozisyona tıkla (target_x/y zaten current)
 
                     if self._clicker.is_ready:
                         # Tahmin edilen noktaya tıkla
                         if self._clicker.click_at(target_x, target_y):
                             clicked = True
                             self._click_count_in_minigame += 1
-                            
-                            # Hata ayıklama için tıklandığı anın resmini kaydet
-                            if hasattr(self, '_capture') and self._capture:
-                                import cv2
-                                import os
-                                debug_dir = os.path.join(os.path.dirname(__file__), "..", "..", "debug_clicks")
-                                os.makedirs(debug_dir, exist_ok=True)
-                                
-                                # Anlık kareyi al (Hafif gecikmeli olabilir ama fikir verir)
-                                frame = self._capture.grab_frame()
-                                if frame is not None and detection.fish is not None:
-                                    cv2.drawContours(frame, [detection.fish.contour], -1, (0, 0, 255), 2)
-                                    cv2.circle(frame, (detection.fish.center_x, detection.fish.center_y), 5, (0, 255, 0), -1)
-                                    filename = os.path.join(debug_dir, f"click_{self.successful_catches}_{self._click_count_in_minigame}.jpg")
-                                    cv2.imwrite(filename, frame)
 
         elif self.state == BotState.POST_CATCH:
             status_msg = f"Toparlaniyor... ({int(self._cfg.delay_after_catch - elapsed)}s)"

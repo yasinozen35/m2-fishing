@@ -71,6 +71,13 @@ if sys.platform == "win32":
             move_func(end_x, end_y)
             
         @staticmethod
+        def fastClick():
+            """Minigame için optimize edilmiş hızlı tıklama (15-30ms basılı tutma - e-sporcu)."""
+            ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+            time.sleep(random.uniform(0.015, 0.030))
+            ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+
+        @staticmethod
         def click():
             import random
             ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
@@ -179,10 +186,9 @@ class HumanClicker:
         # Botun FPS'inin 3'e düşmemesi (Ana görüntü işleme thread'inin donmaması) için
         # Işınlanma ve tıklama işlemini anlık (Fire-and-Forget) bir Thread içinde atıyoruz!
         def _async_click():
-            gui_module.moveTo(final_x, final_y)
-            # Fare hedefe vardığında insan beyni "vur" emrini verene kadar ufak bir süre geçer
-            time.sleep(random.uniform(0.04, 0.08)) 
-            gui_module.click()
+            # Teleport: Bezier animasyonu yok, direkt hedefe ışınlan (minigame için hız kritik)
+            ctypes.windll.user32.SetCursorPos(int(final_x), int(final_y))
+            gui_module.fastClick()
             
         import threading
         threading.Thread(target=_async_click, daemon=True).start()
@@ -202,17 +208,17 @@ class HumanClicker:
         """Tıklamaya hazır mı (cooldown bitmiş mi)."""
         return self.cooldown_remaining <= 0.0
 
-    def press_key(self, key: str) -> None:
+    def press_key(self, key: str, hold_min: float = 0.08, hold_max: float = 0.15) -> None:
         """
         Belirtilen tuşa insan benzeri bir sürede basar ve bırakır.
-        
+
         Args:
             key: Basılacak tuş (ör: '1', 'space', 'i')
+            hold_min: Minimum basılı tutma süresi (varsayılan: 0.08)
+            hold_max: Maksimum basılı tutma süresi (varsayılan: 0.15)
         """
-        # DirectX oyunları (Metin2) klavye tuşlarını algılamak için
-        # tuşa en az 0.15 - 0.3 saniye arası basılı tutulmasını ister!
-        hold_time = random.uniform(0.15, 0.3)
-        
+        hold_time = random.uniform(hold_min, hold_max)
+
         gui_module.keyDown(key)
         time.sleep(hold_time)
         gui_module.keyUp(key)

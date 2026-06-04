@@ -99,11 +99,11 @@ class HumanConfig:
     """İnsan benzeri davranış parametreleri."""
     # Reaksiyon süresi aralığı (saniye).
     # Metin2'de balıklar (özellikle nadir olanlar) çok hızlıdır, bu yüzden reaksiyon süresi agresif tutulmalıdır.
-    reaction_min: float = 0.02     # 20ms
-    reaction_max: float = 0.06     # 60ms
+    reaction_min: float = 0.04     # 40ms (e-sporcu refleks)
+    reaction_max: float = 0.08     # 80ms (e-sporcu refleks)
 
     # Tıklama noktasında rastgele sapma (piksel).
-    aim_offset_px: int = 5
+    aim_offset_px: int = 2
 
     # Mouse hareket süresi aralığı (saniye).
     # Farenin hedefe gitme hızı çok seri olmalı (Aksi halde balık kaçar).
@@ -112,7 +112,7 @@ class HumanConfig:
 
     # Tıklamalar arası minimum bekleme (saniye).
     # Seri tıklama için cooldown. 0.15 spam yapar, 0.45 çok yavaştır. En ideali 0.25 (Saniyede 4 tıklama).
-    click_cooldown: float = 0.25
+    click_cooldown: float = 0.10
 
 
 @dataclass

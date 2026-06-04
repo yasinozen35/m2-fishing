@@ -188,11 +188,12 @@ class BotLogic:
                         # Veri çok eskiyse yine tıklama, vektör oluştur
                         return False, status_msg
 
-                    # STRATEJİ: Balık dairenin kenarındayken (yeni girdiyse) tıklama.
-                    # Merkeze doğru yaklaştığında (yarıçapın %65'i içine girdiğinde) tıkla.
+                    # STRATEJİ: Balık dairenin kenarındayken (tahta çerçevedeyken) tıklama.
+                    # Suyun içine girdiğinden emin olduğumuzda (yarıçapın %82'si içine girdiğinde) tıkla.
+                    # 0.65 çok dardı ve balığın merkeze gelmesini beklerken süre bitiyordu!
                     import math
                     dist_to_center = math.hypot(current_x - detection.circle.center_x, current_y - detection.circle.center_y)
-                    safe_radius = detection.circle.radius * 0.65
+                    safe_radius = detection.circle.radius * 0.82
                     
                     if dist_to_center > safe_radius:
                         # Balık hala kenarlarda, izlemeye devam et ama tıklama

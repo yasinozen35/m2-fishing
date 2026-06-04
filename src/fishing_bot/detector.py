@@ -170,14 +170,25 @@ class Detector:
         """
         cfg = self._fish_cfg
 
-        # Daire ROI maskesi oluştur.
-        mask_roi = None
+        # Daire ROI maskeleri oluştur
+        water_mask = None
+        search_mask = None
         if circle is not None:
-            mask_roi = np.zeros(frame.shape[:2], dtype=np.uint8)
+            # Suyun ortalama rengini bulmak için sadece iç bölge
+            water_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
             cv2.circle(
-                mask_roi,
+                water_mask,
                 (circle.center_x, circle.center_y),
                 int(circle.radius * self._circle_cfg.inner_margin),
+                255,
+                -1,
+            )
+            # Balığı daire dışına çıksa bile takip edebilmek için geniş arama bölgesi (1.8x yarıçap)
+            search_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+            cv2.circle(
+                search_mask,
+                (circle.center_x, circle.center_y),
+                int(circle.radius * 1.8),
                 255,
                 -1,
             )
@@ -185,9 +196,9 @@ class Detector:
         # ── Süper Hızlı Adaptive Threshold ──
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        if mask_roi is not None:
-            # Sadece ROI bölgesinin ortalamasını al (Suyun rengi)
-            roi_pixels = gray[mask_roi > 0]
+        if water_mask is not None:
+            # Sadece suyun (iç bölgenin) ortalamasını al
+            roi_pixels = gray[water_mask > 0]
             if len(roi_pixels) == 0:
                 return None
             mean_val = np.mean(roi_pixels)
@@ -198,8 +209,9 @@ class Detector:
         threshold = max(0, int(mean_val - cfg.threshold_offset))
         mask = cv2.inRange(gray, 0, threshold)
 
-        if mask_roi is not None:
-            mask = cv2.bitwise_and(mask, mask_roi)
+        # Balığı geniş alanda ara (Takip kaybolmasın)
+        if search_mask is not None:
+            mask = cv2.bitwise_and(mask, search_mask)
 
         return self._find_best_contour(mask, cfg)
 

@@ -152,7 +152,7 @@ class Config:
     debug_mode: bool = True
 
     # FPS sınırı (ana döngü).
-    target_fps: int = 30
+    target_fps: int = 60
 
     def __post_init__(self):
         """Uygulama başlatıldığında kalibrasyon dosyasını otomatik yükler."""

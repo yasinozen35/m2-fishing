@@ -148,25 +148,25 @@ else:
     results.ok(f"Linux display_scale = {config.capture.display_scale}")
 
 # Varsayılan değer kontrolleri
-if config.human.reaction_min == 0.08:
-    results.ok("Human reaction_min = 0.08s")
+if config.human.reaction_min == 0.02:
+    results.ok("Human reaction_min = 0.02s")
 else:
-    results.fail("Human reaction_min", f"Beklenen: 0.08, Gercek: {config.human.reaction_min}")
+    results.fail("Human reaction_min", f"Beklenen: 0.02, Gercek: {config.human.reaction_min}")
 
-if config.human.reaction_max == 0.20:
-    results.ok("Human reaction_max = 0.20s")
+if config.human.reaction_max == 0.06:
+    results.ok("Human reaction_max = 0.06s")
 else:
-    results.fail("Human reaction_max", f"Beklenen: 0.20, Gercek: {config.human.reaction_max}")
+    results.fail("Human reaction_max", f"Beklenen: 0.06, Gercek: {config.human.reaction_max}")
 
 if config.human.aim_offset_px == 5:
     results.ok("Human aim_offset_px = 5")
 else:
     results.fail("Human aim_offset_px", f"Beklenen: 5, Gercek: {config.human.aim_offset_px}")
 
-if config.target_fps == 30:
-    results.ok("target_fps = 30")
+if config.target_fps == 60:
+    results.ok("target_fps = 60")
 else:
-    results.fail("target_fps", f"Beklenen: 30, Gercek: {config.target_fps}")
+    results.fail("target_fps", f"Beklenen: 60, Gercek: {config.target_fps}")
 
 
 # ══════════════════════════════════════════════════════════════════

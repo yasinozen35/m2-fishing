@@ -27,18 +27,61 @@ if sys.platform == "win32":
         """PyAutoGUI ve PyDirectInput'un yerini alacak süper hızlı Native Windows Tıklayıcı."""
         @staticmethod
         def moveTo(x, y):
-            ctypes.windll.user32.SetCursorPos(int(x), int(y))
+            try:
+                import pydirectinput
+                move_func = pydirectinput.moveTo
+            except ImportError:
+                move_func = ctypes.windll.user32.SetCursorPos
+
+            import pyautogui
+            import math
+            import time
+            import random
+
+            start_x, start_y = pyautogui.position()
+            end_x, end_y = int(x), int(y)
+            
+            dist = math.hypot(end_x - start_x, end_y - start_y)
+            if dist < 5:
+                move_func(end_x, end_y)
+                return
+
+            # Hızlı ama insansı kaydırma süresi (50-80 milisaniye)
+            duration = random.uniform(0.05, 0.08)
+            steps = max(5, int(dist / 20))  
+            if steps > 12: steps = 12
+            
+            # Bezier kontrol noktaları (Kavis eklemek için)
+            offset = dist * 0.2
+            p1_x = start_x + (end_x - start_x) * 0.3 + random.uniform(-offset, offset)
+            p1_y = start_y + (end_y - start_y) * 0.3 + random.uniform(-offset, offset)
+            
+            p2_x = start_x + (end_x - start_x) * 0.7 + random.uniform(-offset, offset)
+            p2_y = start_y + (end_y - start_y) * 0.7 + random.uniform(-offset, offset)
+
+            sleep_time = duration / steps
+
+            for i in range(1, steps + 1):
+                t = i / steps
+                bx = (1-t)**3 * start_x + 3*(1-t)**2 * t * p1_x + 3*(1-t) * t**2 * p2_x + t**3 * end_x
+                by = (1-t)**3 * start_y + 3*(1-t)**2 * t * p1_y + 3*(1-t) * t**2 * p2_y + t**3 * end_y
+                move_func(int(bx), int(by))
+                time.sleep(sleep_time)
+
+            move_func(end_x, end_y)
             
         @staticmethod
         def click():
+            import random
             ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-            time.sleep(0.01)
+            time.sleep(random.uniform(0.06, 0.11))
             ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
             
         @staticmethod
         def rightClick():
+            import random
             ctypes.windll.user32.mouse_event(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, 0)
-            time.sleep(0.01)
+            time.sleep(random.uniform(0.06, 0.11))
             ctypes.windll.user32.mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0)
             
         @staticmethod

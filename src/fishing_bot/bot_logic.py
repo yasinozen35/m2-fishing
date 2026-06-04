@@ -168,19 +168,26 @@ class BotLogic:
                     last_pos = getattr(self, "_last_fish_pos", None)
                     last_time = getattr(self, "_last_fish_time", 0.0)
                     
-                    if last_pos is not None:
-                        dt = now - last_time
-                        if 0 < dt < 0.2: # Sadece çok yeni (son 200ms) verilerle tahmin yap
-                            vx = (current_x - last_pos[0]) / dt
-                            vy = (current_y - last_pos[1]) / dt
-                            
-                            # Botun tepki+gitme süresi tahmini ~0.1 saniye
-                            look_ahead_time = 0.1
-                            target_x = int(current_x + vx * look_ahead_time)
-                            target_y = int(current_y + vy * look_ahead_time)
-                    
                     self._last_fish_pos = (current_x, current_y)
                     self._last_fish_time = now
+
+                    # İlk karede hız ölçemeyeceğimiz için tıklamıyoruz, 
+                    # bir sonraki kareyi (16ms sonrasını) bekleyip hızı ölçerek tıklıyoruz!
+                    if last_pos is None:
+                        continue
+                        
+                    dt = now - last_time
+                    if 0 < dt < 0.2: # Sadece çok yeni (son 200ms) verilerle tahmin yap
+                        vx = (current_x - last_pos[0]) / dt
+                        vy = (current_y - last_pos[1]) / dt
+                        
+                        # Botun tepki+gitme süresi tahmini ~0.1 saniye
+                        look_ahead_time = 0.1
+                        target_x = int(current_x + vx * look_ahead_time)
+                        target_y = int(current_y + vy * look_ahead_time)
+                    else:
+                        # Veri çok eskiyse (balık yeni girdiyse) yine tıklama, vektör oluştur
+                        continue
 
                     if self._clicker.is_ready:
                         # Tahmin edilen noktaya tıkla

@@ -170,7 +170,7 @@ class BotLogic:
                     dist_to_center = math.hypot(current_x - detection.circle.center_x, current_y - detection.circle.center_y)
                     safe_radius = detection.circle.radius * 0.82
 
-                    # Pozisyonu her zaman kaydet (velocity tracking için)
+                    # Pozisyon geçmişini tut (2 frame - hızlı yön tepkisi)
                     last_pos = getattr(self, "_last_fish_pos", None)
                     last_time = getattr(self, "_last_fish_time", 0.0)
                     self._last_fish_pos = (current_x, current_y)
@@ -182,7 +182,7 @@ class BotLogic:
                     target_x = current_x
                     target_y = current_y
 
-                    # Hız verisi varsa tahmin yap, yoksa/yetersizse raw pozisyona tıkla
+                    # Velocity varsa küçük bir lead uygula (balığın ortasına odaklan)
                     if last_pos is not None:
                         dt = now - last_time
                         if 0 < dt < 0.2:
@@ -190,18 +190,17 @@ class BotLogic:
                             vy = (current_y - last_pos[1]) / dt
                             speed = math.hypot(vx, vy)
 
-                            # 1. Aşama: Pipeline gecikmesi için ileri tahmin (70ms - e-sporcu refleks)
-                            look_ahead_time = 0.07
+                            # Pipeline ~55-65ms. Hafif tahmin (40ms) + küçük lead (4px) = balığın içinde kal
+                            look_ahead_time = 0.04
                             target_x = int(current_x + vx * look_ahead_time)
                             target_y = int(current_y + vy * look_ahead_time)
 
-                            # 2. Aşama: Balığın hareket yönünde önüne ekstra lead (burnuna tıkla)
-                            if speed > 15:
-                                lead_px = 8
+                            if speed > 20:
+                                lead_px = 4
                                 target_x = int(target_x + (vx / speed) * lead_px)
                                 target_y = int(target_y + (vy / speed) * lead_px)
-                        # else: dt geçersiz → raw pozisyona tıkla (target_x/y zaten current)
-                    # else: ilk kare → raw pozisyona tıkla (target_x/y zaten current)
+                        # else: dt geçersiz → raw pozisyona tıkla
+                    # else: ilk kare → raw pozisyona tıkla
 
                     if self._clicker.is_ready:
                         # Tahmin edilen noktaya tıkla

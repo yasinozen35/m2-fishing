@@ -153,15 +153,15 @@ if config.human.reaction_min == 0.04:
 else:
     results.fail("Human reaction_min", f"Beklenen: 0.04, Gercek: {config.human.reaction_min}")
 
-if config.human.reaction_max == 0.08:
-    results.ok("Human reaction_max = 0.08s")
+if config.human.reaction_max == 0.05:
+    results.ok("Human reaction_max = 0.05s")
 else:
-    results.fail("Human reaction_max", f"Beklenen: 0.08, Gercek: {config.human.reaction_max}")
+    results.fail("Human reaction_max", f"Beklenen: 0.05, Gercek: {config.human.reaction_max}")
 
-if config.human.aim_offset_px == 2:
-    results.ok("Human aim_offset_px = 2")
+if config.human.aim_offset_px == 0:
+    results.ok("Human aim_offset_px = 0")
 else:
-    results.fail("Human aim_offset_px", f"Beklenen: 2, Gercek: {config.human.aim_offset_px}")
+    results.fail("Human aim_offset_px", f"Beklenen: 0, Gercek: {config.human.aim_offset_px}")
 
 if config.target_fps == 60:
     results.ok("target_fps = 60")

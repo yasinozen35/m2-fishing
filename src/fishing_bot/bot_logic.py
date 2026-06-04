@@ -155,11 +155,36 @@ class BotLogic:
                     self.successful_catches += 1
                 self._transition_to(BotState.POST_CATCH)
             else:
-                # Balık içerdeyse ve cooldown bittiyse tıkla (1 saniyede bir)
+                # Balık içerdeyse ve cooldown bittiyse tıkla
                 if detection.is_fish_inside and detection.fish is not None:
+                    
+                    # ── HIZ VE TAHMİN (PREDICTION) ALGORİTMASI ──
+                    current_x = detection.fish.center_x
+                    current_y = detection.fish.center_y
+                    target_x = current_x
+                    target_y = current_y
+                    now = time.time()
+                    
+                    last_pos = getattr(self, "_last_fish_pos", None)
+                    last_time = getattr(self, "_last_fish_time", 0.0)
+                    
+                    if last_pos is not None:
+                        dt = now - last_time
+                        if 0 < dt < 0.2: # Sadece çok yeni (son 200ms) verilerle tahmin yap
+                            vx = (current_x - last_pos[0]) / dt
+                            vy = (current_y - last_pos[1]) / dt
+                            
+                            # Botun tepki+gitme süresi tahmini ~0.1 saniye
+                            look_ahead_time = 0.1
+                            target_x = int(current_x + vx * look_ahead_time)
+                            target_y = int(current_y + vy * look_ahead_time)
+                    
+                    self._last_fish_pos = (current_x, current_y)
+                    self._last_fish_time = now
+
                     if self._clicker.is_ready:
-                        # Balığa tıkla
-                        if self._clicker.click_at(detection.fish.center_x, detection.fish.center_y):
+                        # Tahmin edilen noktaya tıkla
+                        if self._clicker.click_at(target_x, target_y):
                             clicked = True
                             self._click_count_in_minigame += 1
                             

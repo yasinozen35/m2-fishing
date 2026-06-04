@@ -172,9 +172,8 @@ class BotLogic:
                     self._last_fish_time = now
 
                     # İlk karede hız ölçemeyeceğimiz için tıklamıyoruz, 
-                    # bir sonraki kareyi (16ms sonrasını) bekleyip hızı ölçerek tıklıyoruz!
                     if last_pos is None:
-                        continue
+                        return False, status_msg
                         
                     dt = now - last_time
                     if 0 < dt < 0.2: # Sadece çok yeni (son 200ms) verilerle tahmin yap
@@ -186,8 +185,18 @@ class BotLogic:
                         target_x = int(current_x + vx * look_ahead_time)
                         target_y = int(current_y + vy * look_ahead_time)
                     else:
-                        # Veri çok eskiyse (balık yeni girdiyse) yine tıklama, vektör oluştur
-                        continue
+                        # Veri çok eskiyse yine tıklama, vektör oluştur
+                        return False, status_msg
+
+                    # STRATEJİ: Balık dairenin kenarındayken (yeni girdiyse) tıklama.
+                    # Merkeze doğru yaklaştığında (yarıçapın %65'i içine girdiğinde) tıkla.
+                    import math
+                    dist_to_center = math.hypot(current_x - detection.circle.center_x, current_y - detection.circle.center_y)
+                    safe_radius = detection.circle.radius * 0.65
+                    
+                    if dist_to_center > safe_radius:
+                        # Balık hala kenarlarda, izlemeye devam et ama tıklama
+                        return False, status_msg
 
                     if self._clicker.is_ready:
                         # Tahmin edilen noktaya tıkla

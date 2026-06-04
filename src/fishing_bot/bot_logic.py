@@ -151,6 +151,8 @@ class BotLogic:
             
             # Daire kaybolduysa oyun bitti
             if detection.circle is None:
+                if self._click_count_in_minigame >= 3:
+                    self.successful_catches += 1
                 self._transition_to(BotState.POST_CATCH)
             else:
                 # Balık içerdeyse ve cooldown bittiyse tıkla (1 saniyede bir)
@@ -160,12 +162,6 @@ class BotLogic:
                         if self._clicker.click_at(detection.fish.center_x, detection.fish.center_y):
                             clicked = True
                             self._click_count_in_minigame += 1
-                            
-                            # 3 tık başarılı olduysa skoru artır
-                            if self._click_count_in_minigame == 3:
-                                self.successful_catches += 1
-                                # 3 tık atıldı, minigame bitti sayılır
-                                self._transition_to(BotState.POST_CATCH)
 
         elif self.state == BotState.POST_CATCH:
             status_msg = f"Toparlaniyor... ({int(self._cfg.delay_after_catch - elapsed)}s)"

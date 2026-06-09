@@ -10,8 +10,10 @@ Oyun döngüsünü yönetir:
 6. Bekle ve başa dön (POST_CATCH)
 """
 
+import math
 import random
 import time
+from collections import deque
 from enum import Enum, auto
 
 from fishing_bot.config import AutoBotConfig
@@ -37,18 +39,33 @@ class BotLogic:
         self._cfg = config
         self._clicker = clicker
         self._capture = capture
-        
+
         self.state = BotState.IDLE
         self._state_start_time = 0.0
-        
+
         self.successful_catches = 0
         self.total_casts = 0
         self._click_count_in_minigame = 0
         self._prepare_action_done = False
         self._postcatch_action_done = False
-        
+
         self._next_fatigue_time = 0.0
         self._fatigue_duration = 0.0
+
+        # Frame-timer: time.sleep() yerine non-blocking bekleme
+        self._block_until: float = 0.0
+        # WAITING state: ardışık circle tespit sayacı (false positive önleme)
+        self._consecutive_circle_count: int = 0
+        # MINIGAME: balık pozisyon geçmişi (son 5 frame) — adaptif prediction için
+        self._fish_pos_history: deque = deque(maxlen=5)
+        # MINIGAME: tıklama ritim pattern'i (insansı çeşitlilik)
+        self._click_rhythm: list[float] = []
+        self._click_rhythm_idx: int = 0
+        # MINIGAME: bilerek ıskalama (her ~8 balıkta bir)
+        self._intentional_miss: bool = False
+        self._catch_streak: int = 0
+        # WAITING: idle mouse hareket zamanlayıcısı
+        self._last_idle_move: float = 0.0
 
     def start(self) -> None:
         """Döngüyü başlatır."""
@@ -87,10 +104,10 @@ class BotLogic:
             status_msg = "Bot Durduruldu"
 
         elif self.state == BotState.PREPARE:
-            # Sadece bu duruma ilk girildiğinde bir kere çalışmalı
+            # Non-blocking: sadece bu state'e ilk girildiğinde aksiyonu yap
             if not getattr(self, "_prepare_action_done", False):
                 self._prepare_action_done = True
-                
+
                 # 1. Yem tak
                 bait_clicked = False
                 # Ekranda (envanterde) minik balık var mı kontrol et
@@ -102,79 +119,172 @@ class BotLogic:
                         self._clicker.right_click_at(bx, by)
                         bait_clicked = True
                         status_msg = "Minik Balik yeme takildi"
-                        
+
                 if not bait_clicked:
                     self._clicker.press_key(self._cfg.key_bait)
                     status_msg = "Hazirlik: Normal Yem takildi"
-                
-            time.sleep(self._cfg.delay_after_bait)
-            
+
+                # KISA random bekleme (150-500ms) — insansı gecikme
+                self._block_until = now + random.uniform(0.15, 0.50)
+
+            # Yem takma sonrası bekleme süresi doldu mu?
+            if now < self._block_until:
+                status_msg = f"Hazirlik: Bekleniyor... ({self._block_until - now:.1f}s)"
+                return False, status_msg
+
             # 2. Zırh değiştir (opsiyonel trick - Animasyon İptali)
-            # Metin2'de zırh hızlı slota atanamaz. Envanterde belirlenen (x,y) koordinatına sağ tıklanır.
-            # Çıkar ve geri tak yapmak için arka arkaya iki kez sağ tık atılır.
             if self._cfg.use_armor_trick and self._cfg.armor_x > 0 and self._cfg.armor_y > 0:
-                # Zırhı çıkar
-                self._clicker.right_click_at(self._cfg.armor_x, self._cfg.armor_y)
-                time.sleep(0.15)
-                # Zırhı giy
-                self._clicker.right_click_at(self._cfg.armor_x, self._cfg.armor_y)
-                time.sleep(self._cfg.delay_after_armor)
-                
+                # Zırh trick'i sadece bir kez yap
+                if not getattr(self, "_armor_trick_done", False):
+                    self._armor_trick_done = True
+                    self._clicker.right_click_at(self._cfg.armor_x, self._cfg.armor_y)
+                    self._block_until = now + 0.15
+                    status_msg = "Hazirlik: Zirh cikariliyor..."
+                    return False, status_msg
+                elif now < self._block_until:
+                    status_msg = "Hazirlik: Zirh takiliyor..."
+                    return False, status_msg
+                elif not getattr(self, "_armor_trick_phase2", False):
+                    self._armor_trick_phase2 = True
+                    self._clicker.right_click_at(self._cfg.armor_x, self._cfg.armor_y)
+                    self._block_until = now + self._cfg.delay_after_armor
+                    status_msg = "Hazirlik: Zirh geri takildi"
+                    return False, status_msg
+                elif now < self._block_until:
+                    status_msg = f"Hazirlik: Zirh bekleniyor... ({self._block_until - now:.1f}s)"
+                    return False, status_msg
+
             self._transition_to(BotState.CAST)
             if not status_msg:
                 status_msg = "Hazirlik: Yem takildi"
 
         elif self.state == BotState.CAST:
-            # Oltayı at - oyunun yemi algılaması için mini gecikme
-            time.sleep(0.05)
-            # Space tuşuna daha uzun bas (oyun bazen kısa basışı kaçırıyor)
-            self._clicker.press_key(self._cfg.key_fish, hold_min=0.12, hold_max=0.25)
-            self.total_casts += 1
+            # Non-blocking: oltayı sadece bir kez at
+            if not getattr(self, "_cast_done", False):
+                self._cast_done = True
+                # Oltayı at - oyunun yemi algılaması için mini gecikme
+                self._block_until = now + 0.05
+                status_msg = "CAST: Hazirlaniyor..."
+                return False, status_msg
 
-            # Olta atma animasyonu beklemesi
-            time.sleep(self._cfg.delay_after_cast)
+            if now < self._block_until:
+                status_msg = "CAST: Hazirlaniyor..."
+                return False, status_msg
+
+            if not getattr(self, "_cast_pressed", False):
+                self._cast_pressed = True
+                # Space tuşuna bas
+                self._clicker.press_key(self._cfg.key_fish, hold_min=0.12, hold_max=0.25)
+                self.total_casts += 1
+                # Cast sonrası animasyon beklemesi başlat (bu sürede tespit yapma)
+                self._block_until = now + self._cfg.delay_after_cast
+                status_msg = "CAST: Olta atildi, animasyon bekleniyor..."
+                return False, status_msg
+
+            # Animasyon süresi doldu mu?
+            if now < self._block_until:
+                status_msg = f"CAST: Animasyon... ({self._block_until - now:.1f}s)"
+                return False, status_msg
 
             self._transition_to(BotState.WAITING)
-            status_msg = "Olta atildi"
+            status_msg = "Olta atildi, balik bekleniyor"
 
         elif self.state == BotState.WAITING:
             status_msg = f"Balik bekleniyor... ({int(elapsed)}s)"
-            
-            # Daire (mini-oyun) çıktıysa minigame state'ine geç
+
+            # ── Idle Mouse Hareketi (İnsan sıkılmış gibi) ──
+            # Her 3-7 saniyede bir fareyi hafifçe oynat
+            if now - self._last_idle_move > random.uniform(3.0, 7.0):
+                self._last_idle_move = now
+                try:
+                    import pyautogui
+                    cur_x, cur_y = pyautogui.position()
+                    jitter_x = cur_x + random.randint(-25, 25)
+                    jitter_y = cur_y + random.randint(-25, 25)
+                    # Küçük, yavaş hareket (oyuncu etrafa bakıyor gibi)
+                    import ctypes
+                    ctypes.windll.user32.SetCursorPos(jitter_x, jitter_y)
+                except Exception:
+                    pass  # Mouse hareketi başarısız olursa sessizce devam et
+
+            # Daire tespit edilirse MINIGAME'e geç (anında, bekleme yok)
             if detection.circle is not None:
                 self._transition_to(BotState.MINIGAME)
-                
+            else:
+                # Circle yok → sayacı sıfırla
+                self._consecutive_circle_count = 0
+
             # Timeout (balık vurmadıysa veya kaçtıysa)
-            elif elapsed > self._cfg.timeout_waiting_fish:
+            if elapsed > self._cfg.timeout_waiting_fish:
                 self._transition_to(BotState.POST_CATCH)
 
         elif self.state == BotState.MINIGAME:
             status_msg = f"MINIGAME: {self._click_count_in_minigame}/3 Tik"
-            
-            # Daire kaybolduysa oyun bitti
+
+            # Daire kaybolduysa hemen çıkma — 5 frame üst üste yoksa gerçekten bitti
             if detection.circle is None:
-                if self._click_count_in_minigame >= 3:
-                    self.successful_catches += 1
-                self._transition_to(BotState.POST_CATCH)
+                missing_count = getattr(self, "_circle_missing_count", 0) + 1
+                self._circle_missing_count = missing_count
+                if missing_count >= 5:
+                    if self._click_count_in_minigame >= 3:
+                        self.successful_catches += 1
+                    if detector is not None:
+                        detector.invalidate_circle_cache()
+                    self._circle_missing_count = 0
+                    self._transition_to(BotState.POST_CATCH)
+                else:
+                    status_msg = f"MINIGAME: Circle yok ({missing_count}/5)..."
+                    return False, status_msg  # Tıklama yapma, bekle
             else:
+                self._circle_missing_count = 0
+                # Maksimum 6 tık — fazlası riskli, circle'ın kaybolmasını bekle
+                if self._click_count_in_minigame >= 6:
+                    status_msg = f"MINIGAME: {self._click_count_in_minigame} tik tamam, circle kapaniyor..."
+                    return False, status_msg
                 # Balık içerdeyse ve cooldown bittiyse tıkla
                 if detection.is_fish_inside and detection.fish is not None:
 
-                    # ── HIZ VE TAHMİN (PREDICTION) ALGORİTMASI ──
+                    # ── ADAPTİF HIZ VE TAHMİN (PREDICTION) ALGORİTMASI ──
                     current_x = detection.fish.center_x
                     current_y = detection.fish.center_y
                     now = time.time()
 
-                    # Safe zone kontrolü (önce bunu yap, dışarıdaysa tıklama)
-                    import math
-                    dist_to_center = math.hypot(current_x - detection.circle.center_x, current_y - detection.circle.center_y)
-                    safe_radius = detection.circle.radius * 0.82
+                    # Pozisyon geçmişine ekle (son 5 frame)
+                    self._fish_pos_history.append((current_x, current_y, now))
 
-                    # Pozisyon geçmişini tut (2 frame - hızlı yön tepkisi)
-                    last_pos = getattr(self, "_last_fish_pos", None)
-                    last_time = getattr(self, "_last_fish_time", 0.0)
-                    self._last_fish_pos = (current_x, current_y)
-                    self._last_fish_time = now
+                    # Safe zone kontrolü — balık hızına göre DİNAMİK
+                    dist_to_center = math.hypot(
+                        current_x - detection.circle.center_x,
+                        current_y - detection.circle.center_y
+                    )
+
+                    # Hız hesapla (son 5 frame moving average)
+                    speed = 0.0
+                    vx, vy = 0.0, 0.0
+                    if len(self._fish_pos_history) >= 2:
+                        # Son 5 frame'den ortalama velocity
+                        velocities = []
+                        history_list = list(self._fish_pos_history)
+                        for i in range(1, len(history_list)):
+                            px, py, pt = history_list[i]
+                            ppx, ppy, ppt = history_list[i - 1]
+                            dt_i = pt - ppt
+                            if 0 < dt_i < 0.2:
+                                vx_i = (px - ppx) / dt_i
+                                vy_i = (py - ppy) / dt_i
+                                velocities.append((vx_i, vy_i))
+                        if velocities:
+                            vx = sum(v[0] for v in velocities) / len(velocities)
+                            vy = sum(v[1] for v in velocities) / len(velocities)
+                            speed = math.hypot(vx, vy)
+
+                    # Hıza göre DİNAMİK safe_radius
+                    if speed > 200:       # Nadir/çok hızlı balık
+                        safe_radius = detection.circle.radius * 0.72
+                    elif speed > 100:     # Hızlı balık
+                        safe_radius = detection.circle.radius * 0.78
+                    else:                 # Normal balık
+                        safe_radius = detection.circle.radius * 0.85
 
                     if dist_to_center > safe_radius:
                         return False, status_msg
@@ -182,31 +292,43 @@ class BotLogic:
                     target_x = current_x
                     target_y = current_y
 
-                    # Velocity varsa küçük bir lead uygula (balığın ortasına odaklan)
-                    if last_pos is not None:
-                        dt = now - last_time
-                        if 0 < dt < 0.2:
-                            vx = (current_x - last_pos[0]) / dt
-                            vy = (current_y - last_pos[1]) / dt
-                            speed = math.hypot(vx, vy)
+                    # Velocity varsa adaptif lead uygula
+                    if speed > 5:  # Balık hareket ediyor
+                        # Hıza göre ADAPTİF look_ahead_time
+                        if speed > 200:
+                            look_ahead_time = 0.07   # Hızlı balık: daha ileriye bak
+                        elif speed > 100:
+                            look_ahead_time = 0.05   # Orta hızlı
+                        else:
+                            look_ahead_time = 0.03   # Yavaş: az lead yeterli
 
-                            # Pipeline ~55-65ms. Hafif tahmin (40ms) + küçük lead (4px) = balığın içinde kal
-                            look_ahead_time = 0.04
-                            target_x = int(current_x + vx * look_ahead_time)
-                            target_y = int(current_y + vy * look_ahead_time)
+                        target_x = int(current_x + vx * look_ahead_time)
+                        target_y = int(current_y + vy * look_ahead_time)
 
-                            if speed > 20:
-                                lead_px = 4
+                        # Hızlı balıklara ekstra lead (px)
+                        if speed > 100:
+                            lead_px = int(min(20, speed * 0.08))
+                            if speed > 0:
                                 target_x = int(target_x + (vx / speed) * lead_px)
                                 target_y = int(target_y + (vy / speed) * lead_px)
-                        # else: dt geçersiz → raw pozisyona tıkla
-                    # else: ilk kare → raw pozisyona tıkla
+                    # else: balık duruyor → raw pozisyona tıkla (prediction yapma)
 
                     if self._clicker.is_ready:
+                        # ── Bilerek Iskalama: 3. tıklamayı yapma (~%12 ihtimal) ──
+                        if self._intentional_miss and self._click_count_in_minigame >= 2:
+                            self._intentional_miss = False
+                            self._clicker._last_click_time = time.time()
+                            return False, status_msg
+
                         # Tahmin edilen noktaya tıkla
                         if self._clicker.click_at(target_x, target_y):
                             clicked = True
                             self._click_count_in_minigame += 1
+
+                            # ── İnsansı Ritim: tıklamadan SONRA cooldown'u ayarla ──
+                            if self._click_rhythm and self._click_rhythm_idx < len(self._click_rhythm):
+                                self._clicker._human.click_cooldown = self._click_rhythm[self._click_rhythm_idx]
+                                self._click_rhythm_idx += 1
 
         elif self.state == BotState.POST_CATCH:
             status_msg = f"Toparlaniyor... ({int(self._cfg.delay_after_catch - elapsed)}s)"
@@ -273,11 +395,39 @@ class BotLogic:
         """Durum değiştirir ve zamanlayıcıyı sıfırlar."""
         self.state = new_state
         self._state_start_time = time.time()
-        
+
         if new_state == BotState.MINIGAME:
             self._click_count_in_minigame = 0
             self._fish_clicked_this_pass = False
+            self._fish_pos_history.clear()  # Yeni minigame → temiz pozisyon geçmişi
+            self._circle_missing_count = 0  # Circle dalgalanma sayacı
+
+            # ── Rastgele Tıklama Ritim Pattern'i ──
+            # Her minigame'de farklı ritim (insansı çeşitlilik)
+            base_cooldown = self._clicker._human.click_cooldown
+            patterns = [
+                [base_cooldown, base_cooldown * 1.1, base_cooldown * 0.9],       # Dengeli
+                [base_cooldown * 0.85, base_cooldown * 0.9, base_cooldown * 1.2], # Hızlıdan yavaşa
+                [base_cooldown * 1.15, base_cooldown * 0.85, base_cooldown * 0.9],# Yavaştan hızlıya
+                [base_cooldown * 0.95, base_cooldown * 1.1, base_cooldown * 0.95],# Düzensiz
+                [base_cooldown * 1.05, base_cooldown * 0.8, base_cooldown * 1.1], # Karışık
+            ]
+            self._click_rhythm = random.choice(patterns)
+            self._click_rhythm_idx = 0
+
+            # ── Bilerek Iskalama (her ~8 balıkta bir) ──
+            self._catch_streak += 1
+            self._intentional_miss = (self._catch_streak >= random.randint(7, 10))
+            if self._intentional_miss:
+                self._catch_streak = 0  # Sayaç sıfırla
         elif new_state == BotState.PREPARE:
             self._prepare_action_done = False
+            self._armor_trick_done = False
+            self._armor_trick_phase2 = False
         elif new_state == BotState.POST_CATCH:
             self._postcatch_action_done = False
+        elif new_state == BotState.CAST:
+            self._cast_done = False
+            self._cast_pressed = False
+        elif new_state == BotState.WAITING:
+            self._consecutive_circle_count = 0

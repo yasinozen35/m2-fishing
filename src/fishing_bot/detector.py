@@ -107,50 +107,136 @@ class Detector:
 
     # ── Daire Tespiti ──────────────────────────────────────────────
 
+    def _verify_cached_circle(self, frame: np.ndarray, circle: Circle) -> bool:
+        """
+        Cache'teki çemberin hala ekranda olup olmadığını doğrular.
+        Çember çevresinden 8 noktada beyaz piksel kontrolü yapar.
+        Frame içindeki noktaların en az %60'ı beyaz olmalı.
+        """
+        import math
+        cx, cy, r = circle.center_x, circle.center_y, circle.radius
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        white_points = 0
+        total_checked = 0
+        # 8 açı — daha fazla örnek, daha toleranslı
+        for angle in [0, 45, 90, 135, 180, 225, 270, 315]:
+            px = int(cx + r * 0.92 * math.cos(math.radians(angle)))
+            py = int(cy + r * 0.92 * math.sin(math.radians(angle)))
+            if 0 <= px < frame.shape[1] and 0 <= py < frame.shape[0]:
+                total_checked += 1
+                v = int(hsv[py, px, 2])
+                s = int(hsv[py, px, 1])
+                if v > 130 and s < 100:  # Daha toleranslı beyaz eşiği
+                    white_points += 1
+        # Frame içindeki noktaların en az %60'ı beyaz olmalı (en az 1 nokta)
+        if total_checked == 0:
+            return True  # Doğrulayamıyorsak varsayılan: geçerli
+        return white_points >= max(1, total_checked * 0.6)
+
     def _detect_circle(self, frame: np.ndarray) -> Circle | None:
         """
         Hough Circle Transform ile büyük daireyi tespit eder.
         Cache mekanizması ile her karede yeniden hesaplamaz.
+        Cache doğrulama: çember çevresinde beyaz piksel kontrolü.
         """
-        # Cache hala geçerliyse, cached değeri döndür.
+        # Cache hala geçerliyse döndür.
         if self._cached_circle is not None and self._cache_counter > 0:
             self._cache_counter -= 1
+            # Her 6 frame'de bir doğrulama yap.
+            # NOT: counter > 0 kontrolü ile ilk hit'te doğrulama yapmayı engelliyoruz
+            # (counter 1'den 0'a düşer, 0 > 0 false → doğrulama atlanır).
+            if self._cache_counter > 0 and self._cache_counter % 6 == 0:
+                if not self._verify_cached_circle(frame, self._cached_circle):
+                    self._cached_circle = None
+                    self._cache_counter = 0
+                    return None
             return self._cached_circle
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         gray = cv2.GaussianBlur(gray, (9, 9), 2)
 
         cfg = self._circle_cfg
-        circles = cv2.HoughCircles(
-            gray,
-            cv2.HOUGH_GRADIENT,
-            dp=cfg.dp,
-            minDist=cfg.min_dist,
-            param1=cfg.param1,
-            param2=cfg.param2,
-            minRadius=cfg.min_radius,
-            maxRadius=cfg.max_radius,
-        )
 
-        if circles is None:
+        # ── İKİ AŞAMALI DAİRE TESPİTİ ──
+        # Aşama 1: Beyaz HSV maskesi ile (tercih edilen)
+        # Aşama 2: Normal gray ile (fallback)
+        best_circle = None
+
+        for attempt, (use_mask, src_gray) in enumerate([
+            (True, gray),       # Aşama 1: beyaz maskeli
+            (False, gray),      # Aşama 2: normal gray
+        ]):
+            if use_mask:
+                hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+                lower_white = np.array([0, 0, 120])
+                upper_white = np.array([180, 120, 255])
+                white_mask = cv2.inRange(hsv, lower_white, upper_white)
+                search_gray = cv2.bitwise_and(src_gray, src_gray, mask=white_mask)
+            else:
+                search_gray = src_gray
+
+            circles = cv2.HoughCircles(
+                search_gray,
+                cv2.HOUGH_GRADIENT,
+                dp=cfg.dp,
+                minDist=cfg.min_dist,
+                param1=cfg.param1,
+                param2=cfg.param2,
+                minRadius=cfg.min_radius,
+                maxRadius=cfg.max_radius,
+            )
+
+            if circles is not None:
+                circles = np.uint16(np.around(circles))
+                best = max(circles[0], key=lambda c: c[2])
+                candidate = Circle(
+                    center_x=int(best[0]),
+                    center_y=int(best[1]),
+                    radius=int(best[2]),
+                )
+                # İç bölge doğrulaması (sadece beyaz maskeli aşamada)
+                if not use_mask or self._verify_circle_interior(frame, candidate):
+                    best_circle = candidate
+                    break  # Geçerli daire bulundu, diğer aşamaya geçme
+
+        if best_circle is None:
             self._cached_circle = None
             return None
 
-        # En büyük yarıçaplı daireyi seç.
-        circles = np.uint16(np.around(circles))
-        best = max(circles[0], key=lambda c: c[2])
-
-        detected = Circle(
-            center_x=int(best[0]),
-            center_y=int(best[1]),
-            radius=int(best[2]),
-        )
-
         # Cache'e kaydet.
-        self._cached_circle = detected
+        self._cached_circle = best_circle
         self._cache_counter = cfg.cache_ttl_frames
 
-        return detected
+        return best_circle
+
+    def _verify_circle_interior(self, frame: np.ndarray, circle: Circle) -> bool:
+        """
+        Tespit edilen çemberin iç bölgesinin su renginde olup olmadığını kontrol eder.
+        Su: orta-yüksek saturation (mavi/yeşil), orta value.
+        False dönerse tespit edilen şey oyun çemberi değildir.
+        """
+        cx, cy, r = circle.center_x, circle.center_y, circle.radius
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+        # Çemberin iç bölgesinden örnek al (merkeze yakın %25'lik alan)
+        inner_r = max(5, int(r * 0.25))
+        y1 = max(0, cy - inner_r)
+        y2 = min(frame.shape[0], cy + inner_r)
+        x1 = max(0, cx - inner_r)
+        x2 = min(frame.shape[1], cx + inner_r)
+
+        if y2 <= y1 or x2 <= x1:
+            return False
+
+        inner_region = hsv[y1:y2, x1:x2]
+        avg_saturation = np.mean(inner_region[:, :, 1])
+        avg_value = np.mean(inner_region[:, :, 2])
+
+        # Su: orta-yüksek saturation (>15), orta value (30-235)
+        # Siyah/gri düz renk: düşük saturation → sahte tespit
+        # Daha toleranslı değerler (oyun içi aydınlatma farkları için)
+        is_water = avg_saturation > 15 and 30 < avg_value < 235
+        return is_water
 
     def invalidate_circle_cache(self) -> None:
         """Daire cache'ini temizler (kalibrasyon sonrası vb.)."""
@@ -165,8 +251,10 @@ class Detector:
         circle: Circle | None,
     ) -> Fish | None:
         """
-        Balık siluetini tespit eder.
-        Süper Hızlı Adaptive Threshold yöntemi kullanılır.
+        Balık siluetini HİBRİT yöntemle tespit eder:
+        1. Adaptive Threshold: Sudan koyu pikselleri bulur
+        2. HSV Gri Filtre: Gri tonları (balık) mavi/yeşil (su) ayrımı
+        3. İki mask'ı BİRLEŞTİR — iki yöntem de aynı bölgeyi işaret ediyorsa balıktır
         """
         cfg = self._fish_cfg
 
@@ -182,11 +270,10 @@ class Detector:
                 -1,
             )
 
-        # ── Süper Hızlı Adaptive Threshold ──
+        # ── METHOD 1: Adaptive Threshold ──
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         if mask_roi is not None:
-            # Sadece ROI bölgesinin ortalamasını al (Suyun rengi)
             roi_pixels = gray[mask_roi > 0]
             if len(roi_pixels) == 0:
                 return None
@@ -194,27 +281,61 @@ class Detector:
         else:
             mean_val = np.mean(gray)
 
-        # Ortalamadan N birim daha koyu pikselleri (gölgeyi/balığı) kabul et.
+        # Ortalamadan threshold_offset kadar koyu pikseller
         threshold = max(0, int(mean_val - cfg.threshold_offset))
-        mask = cv2.inRange(gray, 0, threshold)
+        mask_adaptive = cv2.inRange(gray, 0, threshold)
 
+        # ── METHOD 2: HSV Gri Tonlama Filtresi ──
+        # Balık: gri (düşük saturation, orta value)
+        # Su: mavi/yeşil (yüksek saturation) → FİLTRELENİR
+        # Beyaz çember: yüksek value, düşük saturation → FİLTRELENİR
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        lower_gray = np.array([0, 0, 30])     # Düşük S, düşük V (koyu gri-siyah)
+        upper_gray = np.array([180, 100, 200]) # Saturation < 100 (gevşek), Value 30-200
+        mask_hsv = cv2.inRange(hsv, lower_gray, upper_gray)
+
+        # ── HİBRİT BİRLEŞTİRME ──
+        # İki mask'ın KESİŞİMİ: iki yöntem de balık diyorsa güvenilir
+        mask_combined = cv2.bitwise_and(mask_adaptive, mask_hsv)
+
+        # ROI ile sınırla
         if mask_roi is not None:
-            mask = cv2.bitwise_and(mask, mask_roi)
+            mask_combined = cv2.bitwise_and(mask_combined, mask_roi)
 
-        return self._find_best_contour(mask, cfg)
+        # Önce birleşik mask'ta ara. Bulamazsa adaptive-only mask'a dön (yeni balık tipleri için).
+        result = self._find_best_contour(mask_combined, cfg, circle)
+        if result is not None:
+            return result
+
+        # Fallback: sadece adaptive threshold (yeni/görülmemiş balık renkleri için)
+        if mask_roi is not None:
+            mask_adaptive = cv2.bitwise_and(mask_adaptive, mask_roi)
+        return self._find_best_contour(mask_adaptive, cfg, circle)
 
     def _find_best_contour(
         self,
         mask: np.ndarray,
         cfg: FishDetectConfig,
+        circle: Circle | None = None,
     ) -> Fish | None:
-        """Maskeden en uygun contour'u bulur ve Fish döndürür."""
-        # Yüksek performanslı morfolojik işlemler (Gürültü temizleme).
-        mask = cv2.erode(mask, self._morph_kernel, iterations=1)
-        mask = cv2.dilate(mask, self._morph_kernel, iterations=1)
+        """
+        Maskeden en uygun contour'u bulur ve Fish döndürür.
 
+        TOP-3 contour'u değerlendirir ve balıklık skoru hesaplar:
+        - Alan puanı: orta boyut tercih edilir
+        - Şekil puanı: width/height oranı 1.5-5.0 arası (uzun cisim = balık)
+        - Pozisyon puanı: daire merkezine yakınlık
+        - Vücut merkezi: bounding box yatay ortası, dikey %40'ı (kuyruktan kaçın)
+        """
+        # Morfolojik işlemler (gürültü temizleme — YUMUŞAK).
+        # ÖNCE dilate (parçaları birleştir), SONRA erode (gereksiz genişlemeyi geri al).
+        # Eskiden erode→dilate (opening) yapıyorduk ama bu küçük balıkları YOK EDİYORDU.
+        # Şimdi dilate→erode (closing) ile önce parçaları birleştiriyoruz.
+        small_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+        mask = cv2.dilate(mask, self._morph_kernel, iterations=1)
+        mask = cv2.erode(mask, small_kernel, iterations=1)
         mask = cv2.GaussianBlur(mask, (3, 3), 0)
-        _, mask = cv2.threshold(mask, 127, 255, cv2.THRESH_BINARY)
+        _, mask = cv2.threshold(mask, 100, 255, cv2.THRESH_BINARY)  # 127→100 daha toleranslı
 
         contours, _ = cv2.findContours(
             mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
@@ -223,29 +344,96 @@ class Detector:
         if not contours:
             return None
 
-        # SÜPER HIZLI OPTİMİZASYON: Tüm contour'lar üzerinde Python FOR döngüsü çevirmek 
-        # (Özellikle su dalgaları binlerce gürültü oluşturduğunda) FPS'i 2'ye kadar düşürür ve bilgisayarı kilitler!
-        # Bunun yerine C seviyesinde çalışan max() ile doğrudan en büyük parçayı buluyoruz.
-        best_contour = max(contours, key=cv2.contourArea)
-        best_area = cv2.contourArea(best_contour)
+        # Filtrelenmiş contour'ları topla (min/max alan arası)
+        valid_contours = []
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if cfg.min_area <= area <= cfg.max_area:
+                valid_contours.append(cnt)
 
-        # En büyük parça balık olmak için çok küçük veya çok büyükse (örn: Sadece su dalgasıysa) yoksay.
-        if not (cfg.min_area <= best_area <= cfg.max_area):
+        if not valid_contours:
             return None
 
-        moments = cv2.moments(best_contour)
-        if moments["m00"] == 0:
+        # En büyük 3 contour'u al (performans için C-level sırala)
+        valid_contours.sort(key=cv2.contourArea, reverse=True)
+        top_contours = valid_contours[:3]
+
+        # Her contour için balıklık skoru hesapla
+        best_score = -1.0
+        best_contour = None
+        circle_center = (circle.center_x, circle.center_y) if circle else None
+
+        for cnt in top_contours:
+            score = self._score_contour(cnt, circle_center)
+            if score > best_score:
+                best_score = score
+                best_contour = cnt
+
+        if best_contour is None:
             return None
 
-        cx = int(moments["m10"] / moments["m00"])
-        cy = int(moments["m01"] / moments["m00"])
+        # Bounding box'tan vücut merkezini hesapla
+        # Yatayda bounding box ortası, DİKEYDE %40 (üst gövde, kuyruk altta kalır)
+        x, y, w, h = cv2.boundingRect(best_contour)
+        cx = x + w // 2
+        cy = y + int(h * 0.40)  # Vücut ortası = bounding box üst kısmı (%40)
 
         return Fish(
             center_x=cx,
             center_y=cy,
             contour=best_contour,
-            area=best_area,
+            area=cv2.contourArea(best_contour),
         )
+
+    def _score_contour(
+        self,
+        cnt: np.ndarray,
+        circle_center: tuple[int, int] | None = None,
+    ) -> float:
+        """
+        Bir contour'un balık olma ihtimalini skorlar (0.0 - 1.0).
+
+        Puanlama:
+        - Alan puanı (%30): ~300-1500px² ideal balık alanı
+        - Şekil puanı (%40): width/height > 1.5 (uzun cisim = balık, yuvarlak = gürültü)
+        - Pozisyon puanı (%30): daire merkezine yakınlık
+        """
+        area = cv2.contourArea(cnt)
+        x, y, w, h = cv2.boundingRect(cnt)
+
+        # ── Alan Puanı ──
+        # İdeal alan ~500px² (orta boy balık). Çok küçük veya çok büyük düşük puan.
+        ideal_area = 500.0
+        area_deviation = abs(area - ideal_area) / max(ideal_area, 1.0)
+        area_score = max(0.0, 1.0 - area_deviation)
+
+        # ── Şekil Puanı ──
+        # Balık uzun bir cisimdir. width/height oranı yüksekse balık ihtimali yüksek.
+        if h > 0:
+            aspect_ratio = w / h
+            if 1.8 <= aspect_ratio <= 5.0:
+                shape_score = 1.0  # İdeal balık şekli
+            elif 1.2 <= aspect_ratio < 1.8:
+                shape_score = 0.6  # Hafif oval, olabilir
+            elif aspect_ratio > 5.0:
+                shape_score = 0.4  # Çok uzun, muhtemelen yılan/dalga
+            else:
+                shape_score = 0.2  # Yuvarlak, muhtemelen gürültü
+        else:
+            shape_score = 0.0
+
+        # ── Pozisyon Puanı ──
+        if circle_center is not None:
+            cx = x + w // 2
+            cy = y + h // 2
+            dist = math.hypot(cx - circle_center[0], cy - circle_center[1])
+            # 200px içinde tam puan, uzaklaştıkça düşer
+            pos_score = max(0.0, 1.0 - dist / 200.0)
+        else:
+            pos_score = 0.5  # Circle yoksa nötr
+
+        # Ağırlıklı toplam
+        return area_score * 0.30 + shape_score * 0.40 + pos_score * 0.30
 
     # ── Daire İçi Kontrolü ─────────────────────────────────────────
 

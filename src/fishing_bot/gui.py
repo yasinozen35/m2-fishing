@@ -65,16 +65,16 @@ class BotRunnerThread(threading.Thread):
             
             while self.running:
                 loop_start = time.time()
-                
+
                 frame = self.capture.grab_frame()
                 result = self.detector.detect(frame)
-                
+
                 clicked, status_msg = self.bot_logic.update(result, detector=self.detector)
-                
-                # UI'ı güncelle (Çok sık olmaması için log yerine sadece status'u güncelle)
+
+                # UI'ı güncelle
                 self.status_callback(
-                    status_msg, 
-                    self.bot_logic.successful_catches, 
+                    status_msg,
+                    self.bot_logic.successful_catches,
                     self.bot_logic.total_casts
                 )
                 

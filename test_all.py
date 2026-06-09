@@ -148,20 +148,20 @@ else:
     results.ok(f"Linux display_scale = {config.capture.display_scale}")
 
 # Varsayılan değer kontrolleri
-if config.human.reaction_min == 0.04:
-    results.ok("Human reaction_min = 0.04s")
+if config.human.reaction_min == 0.08:
+    results.ok("Human reaction_min = 0.08s")
 else:
-    results.fail("Human reaction_min", f"Beklenen: 0.04, Gercek: {config.human.reaction_min}")
+    results.fail("Human reaction_min", f"Beklenen: 0.08, Gercek: {config.human.reaction_min}")
 
-if config.human.reaction_max == 0.05:
-    results.ok("Human reaction_max = 0.05s")
+if config.human.reaction_max == 0.15:
+    results.ok("Human reaction_max = 0.15s")
 else:
-    results.fail("Human reaction_max", f"Beklenen: 0.05, Gercek: {config.human.reaction_max}")
+    results.fail("Human reaction_max", f"Beklenen: 0.15, Gercek: {config.human.reaction_max}")
 
-if config.human.aim_offset_px == 0:
-    results.ok("Human aim_offset_px = 0")
+if config.human.aim_offset_px == 5:
+    results.ok("Human aim_offset_px = 5")
 else:
-    results.fail("Human aim_offset_px", f"Beklenen: 0, Gercek: {config.human.aim_offset_px}")
+    results.fail("Human aim_offset_px", f"Beklenen: 5, Gercek: {config.human.aim_offset_px}")
 
 if config.target_fps == 60:
     results.ok("target_fps = 60")
@@ -310,7 +310,7 @@ print("  TEST 6: Clicker — Cooldown Mekanizmasi")
 print("="*60)
 
 human_cfg_cd = HumanConfig()
-human_cfg_cd.click_cooldown = 0.5  # 500ms cooldown
+human_cfg_cd.click_cooldown = 0.30  # 300ms cooldown
 
 clicker = HumanClicker(human_cfg_cd, capture_cfg)
 

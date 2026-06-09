@@ -32,6 +32,21 @@ from fishing_bot.bot_logic import BotLogic, BotState
 def _init_platform() -> None:
     system = platform.system()
     if system == "Windows":
+        # ── Admin Yetkisi Kontrolü ──
+        try:
+            import ctypes as _ctypes
+            if _ctypes.windll.shell32.IsUserAnAdmin() == 0:
+                params = ' '.join(f'"{a}"' if ' ' in a else a for a in sys.argv[1:])
+                print("Bot yonetici yetkisiyle yeniden baslatiliyor...")
+                _ctypes.windll.shell32.ShellExecuteW(
+                    None, "runas", sys.executable,
+                    f'"{sys.argv[0]}" {params}',
+                    os.getcwd(), 1,
+                )
+                sys.exit(0)
+        except Exception:
+            pass
+
         try:
             import ctypes
             try:

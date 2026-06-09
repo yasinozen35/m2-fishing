@@ -65,7 +65,7 @@ class CircleDetectConfig:
     param2: int = 40               # Merkez tespit eşiği (düşük = daha hassas)
     min_radius: int = 50           # Minimum daire yarıçapı (px)
     max_radius: int = 300          # Maksimum daire yarıçapı (px)
-    cache_ttl_frames: int = 60     # Daire cache süresi (kare sayısı)
+    cache_ttl_frames: int = 40     # Daire cache süresi (kare sayısı). Uzun: tespit dalgalanmasını bastırmak için.
     inner_margin: float = 0.95     # Daire iç bölge oranı (Daha geniş alan toleransı)
 
 
@@ -79,7 +79,7 @@ class FishDetectConfig:
 
     # Contour alan filtresi (piksel²).
     # Çok küçük contour'lar gürültü, çok büyükler arka plan.
-    min_area: int = 50
+    min_area: int = 30
     max_area: int = 5000
 
     # Balık koyuluğu eşik değeri (Gölge vs Balık ayırımı).
@@ -98,21 +98,21 @@ class FishDetectConfig:
 class HumanConfig:
     """İnsan benzeri davranış parametreleri."""
     # Reaksiyon süresi aralığı (saniye).
-    # Metin2'de balıklar (özellikle nadir olanlar) çok hızlıdır, bu yüzden reaksiyon süresi agresif tutulmalıdır.
-    reaction_min: float = 0.04     # 40ms (dar aralık - tutarlı pipeline)
-    reaction_max: float = 0.05     # 50ms (dar aralık - tutarlı pipeline)
+    # 80-150ms: hızlı ama insansı. Profesyonel oyuncu seviyesi.
+    reaction_min: float = 0.08     # 80ms
+    reaction_max: float = 0.15     # 150ms
 
     # Tıklama noktasında rastgele sapma (piksel).
-    aim_offset_px: int = 0
+    # ±5px sapma ile her seferinde tam merkeze tıklanmaz.
+    aim_offset_px: int = 5
 
     # Mouse hareket süresi aralığı (saniye).
-    # Farenin hedefe gitme hızı çok seri olmalı (Aksi halde balık kaçar).
-    mouse_speed_min: float = 0.01  # 10ms
-    mouse_speed_max: float = 0.03  # 30ms
+    mouse_speed_min: float = 0.02  # 20ms
+    mouse_speed_max: float = 0.05  # 50ms
 
     # Tıklamalar arası minimum bekleme (saniye).
-    # Seri tıklama için cooldown. 0.15 spam yapar, 0.45 çok yavaştır. En ideali 0.25 (Saniyede 4 tıklama).
-    click_cooldown: float = 0.80
+    # 0.30s = saniyede ~3.3 tıklama. Hızlı nadir balıkları yakalamak için optimize.
+    click_cooldown: float = 0.30
 
 
 @dataclass
@@ -137,11 +137,11 @@ class AutoBotConfig:
     fatigue_duration_max: float = 12.0 * 60.0  # Maksimum mola süresi (saniye)
 
     # Döngü zamanlamaları (saniye)
-    delay_after_bait: float = 0.5    # Yem taktıktan sonra bekleme
+    delay_after_bait: float = 0.15   # Yem taktıktan sonra ÇOK KISA bekleme (random ekleniyor)
     delay_after_armor: float = 0.3   # Zırh değiştirdikten sonra bekleme
-    delay_after_cast: float = 2.0    # Oltayı attıktan sonra animasyon beklemesi
-    delay_after_catch: float = 3.0   # Balık çektikten sonra animasyon/toparlanma beklemesi
-    timeout_waiting_fish: float = 45.0 # Suya attıktan sonra max bekleme süresi (balık vurmazsa)
+    delay_after_cast: float = 0.3    # Oltayı attıktan sonra kısa bekleme (2.0s çok uzundu, çember bu sırada kaçıyordu)
+    delay_after_catch: float = 3.0   # Minigame bittikten sonra 3sn bekle, sonra 1'e bas
+    timeout_waiting_fish: float = 30.0 # Suya attıktan sonra max bekleme süresi (45sn çok uzundu)
 
 
 @dataclass

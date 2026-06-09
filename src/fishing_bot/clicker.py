@@ -72,34 +72,61 @@ if sys.platform == "win32":
             
         @staticmethod
         def fastClick():
-            """Minigame için optimize edilmiş hızlı tıklama (15-30ms basılı tutma - e-sporcu)."""
-            ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-            time.sleep(random.uniform(0.015, 0.030))
-            ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+            """
+            Minigame için optimize edilmiş hızlı tıklama.
+            pydirectinput (SendInput) kullanır — DirectX oyunlarla uyumlu.
+            """
+            try:
+                import pydirectinput
+                pydirectinput.mouseDown()
+                time.sleep(random.uniform(0.020, 0.040))
+                pydirectinput.mouseUp()
+            except ImportError:
+                ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+                time.sleep(random.uniform(0.020, 0.040))
+                ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
 
         @staticmethod
         def click():
-            import random
-            ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-            time.sleep(random.uniform(0.06, 0.11))
-            ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-            
+            try:
+                import pydirectinput
+                pydirectinput.mouseDown()
+                time.sleep(random.uniform(0.07, 0.12))
+                pydirectinput.mouseUp()
+            except ImportError:
+                ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+                time.sleep(random.uniform(0.07, 0.12))
+                ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+
         @staticmethod
         def rightClick():
-            import random
-            ctypes.windll.user32.mouse_event(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, 0)
-            time.sleep(random.uniform(0.06, 0.11))
-            ctypes.windll.user32.mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0)
-            
+            try:
+                import pydirectinput
+                pydirectinput.mouseDown(button='right')
+                time.sleep(random.uniform(0.07, 0.12))
+                pydirectinput.mouseUp(button='right')
+            except ImportError:
+                ctypes.windll.user32.mouse_event(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, 0)
+                time.sleep(random.uniform(0.07, 0.12))
+                ctypes.windll.user32.mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0)
+
         @staticmethod
         def mouseDown(button='left'):
-            flag = MOUSEEVENTF_LEFTDOWN if button == 'left' else MOUSEEVENTF_RIGHTDOWN
-            ctypes.windll.user32.mouse_event(flag, 0, 0, 0, 0)
-            
+            try:
+                import pydirectinput
+                pydirectinput.mouseDown(button=button)
+            except ImportError:
+                flag = MOUSEEVENTF_LEFTDOWN if button == 'left' else MOUSEEVENTF_RIGHTDOWN
+                ctypes.windll.user32.mouse_event(flag, 0, 0, 0, 0)
+
         @staticmethod
         def mouseUp(button='left'):
-            flag = MOUSEEVENTF_LEFTUP if button == 'left' else MOUSEEVENTF_RIGHTUP
-            ctypes.windll.user32.mouse_event(flag, 0, 0, 0, 0)
+            try:
+                import pydirectinput
+                pydirectinput.mouseUp(button=button)
+            except ImportError:
+                flag = MOUSEEVENTF_LEFTUP if button == 'left' else MOUSEEVENTF_RIGHTUP
+                ctypes.windll.user32.mouse_event(flag, 0, 0, 0, 0)
             
         @staticmethod
         def keyDown(key):
@@ -162,34 +189,35 @@ class HumanClicker:
         if elapsed < self._human.click_cooldown:
             return False
 
-        # ── 1. Reaksiyon gecikmesi (80-200ms) ──
-        delay = random.uniform(
-            self._human.reaction_min,
-            self._human.reaction_max,
-        )
-        time.sleep(delay)
-
-        # ── 2. Yerel koordinatı ekran koordinatına çevir ──
+        # ── 1. Yerel koordinatı ekran koordinatına çevir ──
         scale = self._capture.display_scale
         screen_x = self._capture.left + (local_x // scale)
         screen_y = self._capture.top + (local_y // scale)
 
-        # ── 3. Hafif koordinat sapması (±N px) ──
+        # ── 2. Hafif koordinat sapması (±N px) ──
         offset = self._human.aim_offset_px
         jitter_x = random.randint(-offset, offset)
         jitter_y = random.randint(-offset, offset)
         final_x = screen_x + jitter_x
         final_y = screen_y + jitter_y
 
-        # ── 4. Mouse'u ANINDA hareket ettir ve Tıkla (ASENKRON) ──
-        # Not: Anti-Cheat sistemleri sentetik tıklama aldıklarında o Thread'i 2-3 saniye dondurabilir (Tarpit tekniği).
-        # Botun FPS'inin 3'e düşmemesi (Ana görüntü işleme thread'inin donmaması) için
-        # Işınlanma ve tıklama işlemini anlık (Fire-and-Forget) bir Thread içinde atıyoruz!
+        # ── 4. Mouse'u hareket ettir ve Tıkla (ASENKRON - ana döngüyü bloklamaz) ──
         def _async_click():
-            # Teleport: Bezier animasyonu yok, direkt hedefe ışınlan (minigame için hız kritik)
-            ctypes.windll.user32.SetCursorPos(int(final_x), int(final_y))
-            gui_module.fastClick()
-            
+            try:
+                import pydirectinput
+                pydirectinput.moveTo(int(final_x), int(final_y))
+                time.sleep(0.008)
+                pydirectinput.mouseDown()
+                time.sleep(random.uniform(0.020, 0.040))
+                pydirectinput.mouseUp()
+            except Exception:
+                # Fallback: Win32 API (admin yetkisi varsa çalışır)
+                ctypes.windll.user32.SetCursorPos(int(final_x), int(final_y))
+                time.sleep(0.008)
+                ctypes.windll.user32.mouse_event(0x0002, 0, 0, 0, 0)  # LEFTDOWN
+                time.sleep(0.030)
+                ctypes.windll.user32.mouse_event(0x0004, 0, 0, 0, 0)  # LEFTUP
+
         import threading
         threading.Thread(target=_async_click, daemon=True).start()
 

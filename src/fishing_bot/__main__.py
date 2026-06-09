@@ -18,6 +18,23 @@ import sys
 # ══════════════════════════════════════════════════════════════════
 
 if sys.platform == "win32":
+    # ── Admin Yetkisi Kontrolü (EN BAŞTA) ──
+    # Oyun admin yetkisiyle çalışıyorsa, bot da admin olmalı.
+    # Aksi halde Windows UIPI, SendInput'un oyuna ulaşmasını engeller.
+    try:
+        import ctypes
+        if ctypes.windll.shell32.IsUserAnAdmin() == 0:
+            # Admin değil → UAC prompt ile yeniden başlat
+            params = ' '.join(f'"{a}"' if ' ' in a else a for a in sys.argv[1:])
+            ctypes.windll.shell32.ShellExecuteW(
+                None, "runas", sys.executable,
+                f'"{sys.argv[0]}" {params}',
+                os.getcwd(), 1,
+            )
+            sys.exit(0)
+    except Exception:
+        pass
+
     try:
         import ctypes
 

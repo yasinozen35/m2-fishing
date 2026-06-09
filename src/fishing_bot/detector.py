@@ -376,7 +376,7 @@ class Detector:
         # Yatayda bounding box ortası, DİKEYDE %40 (üst gövde, kuyruk altta kalır)
         x, y, w, h = cv2.boundingRect(best_contour)
         cx = x + w // 2
-        cy = y + int(h * 0.40)  # Vücut ortası = bounding box üst kısmı (%40)
+        cy = y + int(h * 0.45)  # Vücut ortası = bounding box %45'i (kuyruktan uzak, gövdeye yakın)
 
         return Fish(
             center_x=cx,

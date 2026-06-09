@@ -104,7 +104,7 @@ class HumanConfig:
 
     # Tıklama noktasında rastgele sapma (piksel).
     # ±5px sapma ile her seferinde tam merkeze tıklanmaz.
-    aim_offset_px: int = 5
+    aim_offset_px: int = 2       # ±2px sapma (5px miss yapıyordu)
 
     # Mouse hareket süresi aralığı (saniye).
     mouse_speed_min: float = 0.02  # 20ms
@@ -112,7 +112,7 @@ class HumanConfig:
 
     # Tıklamalar arası minimum bekleme (saniye).
     # 0.30s = saniyede ~3.3 tıklama. Hızlı nadir balıkları yakalamak için optimize.
-    click_cooldown: float = 0.30
+    click_cooldown: float = 0.50  # Tıklamalar arası ~0.5sn (15sn'de ~8 tık = doğal ritim)
 
 
 @dataclass

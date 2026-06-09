@@ -124,8 +124,8 @@ class BotLogic:
                     self._clicker.press_key(self._cfg.key_bait)
                     status_msg = "Hazirlik: Normal Yem takildi"
 
-                # KISA random bekleme (150-500ms) — insansı gecikme
-                self._block_until = now + random.uniform(0.15, 0.50)
+                # 1 saniye bekle (±random) — yem takıldıktan sonra olta atmak için
+                self._block_until = now + random.uniform(0.90, 1.20)
 
             # Yem takma sonrası bekleme süresi doldu mu?
             if now < self._block_until:
@@ -237,8 +237,8 @@ class BotLogic:
                     return False, status_msg  # Tıklama yapma, bekle
             else:
                 self._circle_missing_count = 0
-                # Maksimum 6 tık — fazlası riskli, circle'ın kaybolmasını bekle
-                if self._click_count_in_minigame >= 6:
+                # Maksimum 8 tık — 15sn minigame'de ~0.5sn aralıklarla doğal ritim
+                if self._click_count_in_minigame >= 8:
                     status_msg = f"MINIGAME: {self._click_count_in_minigame} tik tamam, circle kapaniyor..."
                     return False, status_msg
                 # Balık içerdeyse ve cooldown bittiyse tıkla
@@ -292,26 +292,16 @@ class BotLogic:
                     target_x = current_x
                     target_y = current_y
 
-                    # Velocity varsa adaptif lead uygula
-                    if speed > 5:  # Balık hareket ediyor
-                        # Hıza göre ADAPTİF look_ahead_time
-                        if speed > 200:
-                            look_ahead_time = 0.07   # Hızlı balık: daha ileriye bak
-                        elif speed > 100:
-                            look_ahead_time = 0.05   # Orta hızlı
-                        else:
-                            look_ahead_time = 0.03   # Yavaş: az lead yeterli
-
+                    # SADECE hızlı balıklara prediction uygula (miss'i azaltmak için)
+                    if speed > 100:
+                        look_ahead_time = 0.05
                         target_x = int(current_x + vx * look_ahead_time)
                         target_y = int(current_y + vy * look_ahead_time)
-
-                        # Hızlı balıklara ekstra lead (px)
-                        if speed > 100:
-                            lead_px = int(min(20, speed * 0.08))
-                            if speed > 0:
-                                target_x = int(target_x + (vx / speed) * lead_px)
-                                target_y = int(target_y + (vy / speed) * lead_px)
-                    # else: balık duruyor → raw pozisyona tıkla (prediction yapma)
+                        if speed > 0:
+                            lead_px = int(min(15, speed * 0.06))
+                            target_x = int(target_x + (vx / speed) * lead_px)
+                            target_y = int(target_y + (vy / speed) * lead_px)
+                    # Yavaş/orta balık → direkt pozisyona tıkla, prediction yapma
 
                     if self._clicker.is_ready:
                         # ── Bilerek Iskalama: 3. tıklamayı yapma (~%12 ihtimal) ──

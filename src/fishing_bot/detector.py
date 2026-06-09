@@ -373,10 +373,11 @@ class Detector:
             return None
 
         # Bounding box'tan vücut merkezini hesapla
-        # Yatayda bounding box ortası, DİKEYDE %40 (üst gövde, kuyruk altta kalır)
+        # Yatayda bounding box ortası, DİKEYDE config'den gelen offset
+        # Düşük offset = kafaya yakın, Yüksek offset = kuyruğa yakın
         x, y, w, h = cv2.boundingRect(best_contour)
         cx = x + w // 2
-        cy = y + int(h * 0.45)  # Vücut ortası = bounding box %45'i (kuyruktan uzak, gövdeye yakın)
+        cy = y + int(h * self._fish_cfg.fish_body_offset_y)
 
         return Fish(
             center_x=cx,

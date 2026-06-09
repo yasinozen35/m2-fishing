@@ -93,6 +93,13 @@ class FishDetectConfig:
     # Gaussian blur kernel boyutu (tek sayı olmalı).
     blur_kernel_size: int = 5
 
+    # ── Balık Vücut Tıklama Noktası ──
+    # Balık bounding box'ının dikeyde % kaçına tıklanacağı.
+    # 0.0 = balığın en üstü (kafa), 1.0 = en altı (kuyruk).
+    # 0.45 = gövde ortası (varsayılan, çoğu balık için ideal).
+    # DÜŞÜR: kuyruğa yakın / YÜKSELT: kafaya yakın tıklar.
+    fish_body_offset_y: float = 0.45
+
 
 @dataclass
 class HumanConfig:
@@ -108,6 +115,12 @@ class HumanConfig:
     # Tıklama noktasında rastgele sapma (piksel).
     # ±2px sapma ile her seferinde tam merkeze tıklanmaz.
     aim_offset_px: int = 3       # ±3px sapma (insansı mikro hata)
+
+    # ── Balığın Sağına/Soluna Rastgele Tıklama ──
+    # 0 = balığın tam ortasına (varsayılan).
+    # 5-12 = bazen başa bazen kuyruğa yakın tıkla (insansı dağılım).
+    # Piksel cinsinden, HER tıklamada rastgele ±bu değer kadar sapar.
+    horizontal_jitter_px: int = 0
 
     # Mouse hareket süresi aralığı (saniye) — sadece envanter/zırh için.
     mouse_speed_min: float = 0.02  # 20ms
@@ -125,6 +138,8 @@ class HumanConfig:
     prediction_look_ahead_max: float = 0.18    # Maksimum ileriye bakma (hızlı balıklar için)
     prediction_speed_threshold: float = 50.0   # px/s: bu hızın üstünde prediction aktif
     prediction_max_lead_px: int = 35           # Maksimum lead mesafesi (piksel)
+    prediction_lead_factor: float = 0.7        # Lead çarpanı (0.3=az lead, 1.2=çok lead)
+    click_inner_margin: float = 0.90           # Çember içi tıklama sınırı (0.75-0.95)
 
 
 @dataclass
@@ -155,6 +170,9 @@ class AutoBotConfig:
     delay_after_catch: float = 3.0   # Minigame bittikten sonra 3sn bekle, sonra 1'e bas
     timeout_waiting_fish: float = 30.0 # Suya attıktan sonra max bekleme süresi (45sn çok uzundu)
 
+    # Minigame başına maksimum tıklama sayısı
+    max_clicks_per_minigame: int = 8
+
 
 @dataclass
 class Config:
@@ -176,35 +194,73 @@ class Config:
         self.load_calibration()
 
     def save_calibration(self, filepath="calibration.json"):
-        """Kalibrasyon ayarlarını json dosyasına kaydeder."""
+        """TÜM ayarları json dosyasına kaydeder (kalibrasyon + ince ayar)."""
         import json
         data = {
+            # Capture
             "capture_top": self.capture.top,
             "capture_left": self.capture.left,
             "capture_width": self.capture.width,
             "capture_height": self.capture.height,
+            # Zırh
             "armor_x": self.autobot.armor_x,
             "armor_y": self.autobot.armor_y,
+            # Human — reaksiyon & tıklama
+            "reaction_min": self.human.reaction_min,
+            "reaction_max": self.human.reaction_max,
+            "click_cooldown": self.human.click_cooldown,
+            "aim_offset_px": self.human.aim_offset_px,
+            "horizontal_jitter_px": self.human.horizontal_jitter_px,
+            # Human — prediction
+            "prediction_look_ahead_base": self.human.prediction_look_ahead_base,
+            "prediction_look_ahead_max": self.human.prediction_look_ahead_max,
+            "prediction_speed_threshold": self.human.prediction_speed_threshold,
+            "prediction_max_lead_px": self.human.prediction_max_lead_px,
+            "prediction_lead_factor": self.human.prediction_lead_factor,
+            "click_inner_margin": self.human.click_inner_margin,
+            # Fish
+            "fish_body_offset_y": self.fish.fish_body_offset_y,
+            # AutoBot
+            "max_clicks_per_minigame": self.autobot.max_clicks_per_minigame,
         }
         try:
             with open(filepath, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=4)
         except Exception as e:
-            print(f"Kalibrasyon kaydedilemedi: {e}")
+            print(f"Ayarlar kaydedilemedi: {e}")
 
     def load_calibration(self, filepath="calibration.json"):
-        """Kalibrasyon ayarlarını json dosyasından yükler."""
+        """TÜM ayarları json dosyasından yükler."""
         import json
         import os
         if os.path.exists(filepath):
             try:
                 with open(filepath, "r", encoding="utf-8") as f:
                     data = json.load(f)
+                    # Capture
                     self.capture.top = data.get("capture_top", self.capture.top)
                     self.capture.left = data.get("capture_left", self.capture.left)
                     self.capture.width = data.get("capture_width", self.capture.width)
                     self.capture.height = data.get("capture_height", self.capture.height)
+                    # Zırh
                     self.autobot.armor_x = data.get("armor_x", self.autobot.armor_x)
                     self.autobot.armor_y = data.get("armor_y", self.autobot.armor_y)
+                    # Human — reaksiyon & tıklama
+                    self.human.reaction_min = data.get("reaction_min", self.human.reaction_min)
+                    self.human.reaction_max = data.get("reaction_max", self.human.reaction_max)
+                    self.human.click_cooldown = data.get("click_cooldown", self.human.click_cooldown)
+                    self.human.aim_offset_px = data.get("aim_offset_px", self.human.aim_offset_px)
+                    self.human.horizontal_jitter_px = data.get("horizontal_jitter_px", self.human.horizontal_jitter_px)
+                    # Human — prediction
+                    self.human.prediction_look_ahead_base = data.get("prediction_look_ahead_base", self.human.prediction_look_ahead_base)
+                    self.human.prediction_look_ahead_max = data.get("prediction_look_ahead_max", self.human.prediction_look_ahead_max)
+                    self.human.prediction_speed_threshold = data.get("prediction_speed_threshold", self.human.prediction_speed_threshold)
+                    self.human.prediction_max_lead_px = data.get("prediction_max_lead_px", self.human.prediction_max_lead_px)
+                    self.human.prediction_lead_factor = data.get("prediction_lead_factor", self.human.prediction_lead_factor)
+                    self.human.click_inner_margin = data.get("click_inner_margin", self.human.click_inner_margin)
+                    # Fish
+                    self.fish.fish_body_offset_y = data.get("fish_body_offset_y", self.fish.fish_body_offset_y)
+                    # AutoBot
+                    self.autobot.max_clicks_per_minigame = data.get("max_clicks_per_minigame", self.autobot.max_clicks_per_minigame)
             except Exception as e:
-                print(f"Kalibrasyon yuklenemedi: {e}")
+                print(f"Ayarlar yuklenemedi: {e}")

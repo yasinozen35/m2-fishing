@@ -105,7 +105,7 @@ class FishingBotGUI(ctk.CTk):
         super().__init__()
         
         self.title("🎣 Metin2 Otonom Balık Botu V2")
-        self.geometry("700x550")
+        self.geometry("700x700")
         self.config = Config()
         self.bot_thread: Optional[BotRunnerThread] = None
         
@@ -185,6 +185,176 @@ class FishingBotGUI(ctk.CTk):
         self.entry_fish.insert(0, "space")
         self.entry_fish.pack(side="right", padx=10, pady=5)
 
+        # ── İnce Ayar Slider'ları ──
+        ctk.CTkLabel(tab, text="İnce Ayar (Tıklama & Hedefleme)", font=ctk.CTkFont(weight="bold")).pack(pady=(15, 5))
+
+        # 1. Reaksiyon Gecikmesi
+        f_react = ctk.CTkFrame(tab)
+        f_react.pack(fill="x", padx=10, pady=2)
+        ctk.CTkLabel(f_react, text="Reaksiyon (ms):", width=120).pack(side="left", padx=5)
+        self.slider_reaction = ctk.CTkSlider(f_react, from_=50, to=250, number_of_steps=40, width=200)
+        self.slider_reaction.pack(side="left", padx=5)
+        self.slider_reaction.set(140)
+        self.lbl_reaction = ctk.CTkLabel(f_react, text="140", width=40)
+        self.lbl_reaction.pack(side="left", padx=5)
+        self.slider_reaction.configure(command=lambda v: self._on_slider_update(self.lbl_reaction, v, 0))
+
+        # 2. Tıklama Cooldown
+        f_cd = ctk.CTkFrame(tab)
+        f_cd.pack(fill="x", padx=10, pady=2)
+        ctk.CTkLabel(f_cd, text="Tık Aralığı (ms):", width=120).pack(side="left", padx=5)
+        self.slider_cooldown = ctk.CTkSlider(f_cd, from_=200, to=600, number_of_steps=40, width=200)
+        self.slider_cooldown.pack(side="left", padx=5)
+        self.slider_cooldown.set(350)
+        self.lbl_cooldown = ctk.CTkLabel(f_cd, text="350", width=40)
+        self.lbl_cooldown.pack(side="left", padx=5)
+        self.slider_cooldown.configure(command=lambda v: self._on_slider_update(self.lbl_cooldown, v, 0))
+
+        # 3. Max Tıklama (minigame başına)
+        f_maxclicks = ctk.CTkFrame(tab)
+        f_maxclicks.pack(fill="x", padx=10, pady=2)
+        ctk.CTkLabel(f_maxclicks, text="Maks Tıklama:", width=120).pack(side="left", padx=5)
+        self.slider_maxclicks = ctk.CTkSlider(f_maxclicks, from_=3, to=15, number_of_steps=12, width=200)
+        self.slider_maxclicks.pack(side="left", padx=5)
+        self.slider_maxclicks.set(8)
+        self.lbl_maxclicks = ctk.CTkLabel(f_maxclicks, text="8", width=40)
+        self.lbl_maxclicks.pack(side="left", padx=5)
+        self.slider_maxclicks.configure(command=lambda v: self._on_slider_update(self.lbl_maxclicks, v, 0))
+        ctk.CTkLabel(tab, text="  Minigame başına max tık (3=min, 15=max)", text_color="gray").pack()
+
+        # 4. Balık Vücut Ofseti
+        f_body = ctk.CTkFrame(tab)
+        f_body.pack(fill="x", padx=10, pady=2)
+        ctk.CTkLabel(f_body, text="Vücut Ofseti (%):", width=120).pack(side="left", padx=5)
+        self.slider_body_offset = ctk.CTkSlider(f_body, from_=20, to=80, number_of_steps=60, width=200)
+        self.slider_body_offset.pack(side="left", padx=5)
+        self.slider_body_offset.set(45)
+        self.lbl_body_offset = ctk.CTkLabel(f_body, text="45", width=40)
+        self.lbl_body_offset.pack(side="left", padx=5)
+        self.slider_body_offset.configure(command=lambda v: self._on_slider_update(self.lbl_body_offset, v, 0))
+        ctk.CTkLabel(tab, text="  DÜŞÜK = kafaya yakın / YÜKSEK = kuyruğa yakın", text_color="gray").pack()
+
+        # 4. Yatay Jitter (balığın sağına/soluna rastgele tık)
+        f_hjitter = ctk.CTkFrame(tab)
+        f_hjitter.pack(fill="x", padx=10, pady=2)
+        ctk.CTkLabel(f_hjitter, text="Yatay Sapma (px):", width=120).pack(side="left", padx=5)
+        self.slider_hjitter = ctk.CTkSlider(f_hjitter, from_=0, to=20, number_of_steps=20, width=200)
+        self.slider_hjitter.pack(side="left", padx=5)
+        self.slider_hjitter.set(0)
+        self.lbl_hjitter = ctk.CTkLabel(f_hjitter, text="0", width=40)
+        self.lbl_hjitter.pack(side="left", padx=5)
+        self.slider_hjitter.configure(command=lambda v: self._on_slider_update(self.lbl_hjitter, v, 0))
+        ctk.CTkLabel(tab, text="  0=orta / 8=sağa-sola dağılır / 15=geniş dağılım", text_color="gray").pack()
+
+        # 5. Prediction Lead (hız yönüne offset)
+        f_lead = ctk.CTkFrame(tab)
+        f_lead.pack(fill="x", padx=10, pady=2)
+        ctk.CTkLabel(f_lead, text="Lead Çarpanı:", width=120).pack(side="left", padx=5)
+        self.slider_lead = ctk.CTkSlider(f_lead, from_=0.30, to=1.20, number_of_steps=18, width=200)
+        self.slider_lead.pack(side="left", padx=5)
+        self.slider_lead.set(0.70)
+        self.lbl_lead = ctk.CTkLabel(f_lead, text="0.70", width=40)
+        self.lbl_lead.pack(side="left", padx=5)
+        self.slider_lead.configure(command=lambda v: self._on_slider_update(self.lbl_lead, v, 2))
+        ctk.CTkLabel(tab, text="  DÜŞÜK = balığın üstüne / YÜKSEK = balığın önüne", text_color="gray").pack()
+
+        # 6. Max Lead (piksel)
+        f_maxlead = ctk.CTkFrame(tab)
+        f_maxlead.pack(fill="x", padx=10, pady=2)
+        ctk.CTkLabel(f_maxlead, text="Max Lead (px):", width=120).pack(side="left", padx=5)
+        self.slider_maxlead = ctk.CTkSlider(f_maxlead, from_=10, to=60, number_of_steps=50, width=200)
+        self.slider_maxlead.pack(side="left", padx=5)
+        self.slider_maxlead.set(35)
+        self.lbl_maxlead = ctk.CTkLabel(f_maxlead, text="35", width=40)
+        self.lbl_maxlead.pack(side="left", padx=5)
+        self.slider_maxlead.configure(command=lambda v: self._on_slider_update(self.lbl_maxlead, v, 0))
+        ctk.CTkLabel(tab, text="  Hızlı balıkta maksimum kaç px öne tıklanacağı", text_color="gray").pack()
+
+        # 7. Prediction Eşiği (hangi hızda prediction başlasın)
+        f_predth = ctk.CTkFrame(tab)
+        f_predth.pack(fill="x", padx=10, pady=2)
+        ctk.CTkLabel(f_predth, text="Tahmin Eşiği (px/s):", width=120).pack(side="left", padx=5)
+        self.slider_predth = ctk.CTkSlider(f_predth, from_=20, to=150, number_of_steps=26, width=200)
+        self.slider_predth.pack(side="left", padx=5)
+        self.slider_predth.set(50)
+        self.lbl_predth = ctk.CTkLabel(f_predth, text="50", width=40)
+        self.lbl_predth.pack(side="left", padx=5)
+        self.slider_predth.configure(command=lambda v: self._on_slider_update(self.lbl_predth, v, 0))
+        ctk.CTkLabel(tab, text="  DÜŞÜK = her zaman tahmin / YÜKSEK = sadece hızlı balık", text_color="gray").pack()
+
+        # 8. Çember İçi Sınır
+        f_margin = ctk.CTkFrame(tab)
+        f_margin.pack(fill="x", padx=10, pady=2)
+        ctk.CTkLabel(f_margin, text="Çember Sınırı (%):", width=120).pack(side="left", padx=5)
+        self.slider_margin = ctk.CTkSlider(f_margin, from_=75, to=95, number_of_steps=20, width=200)
+        self.slider_margin.pack(side="left", padx=5)
+        self.slider_margin.set(90)
+        self.lbl_margin = ctk.CTkLabel(f_margin, text="90", width=40)
+        self.lbl_margin.pack(side="left", padx=5)
+        self.slider_margin.configure(command=lambda v: self._on_slider_update(self.lbl_margin, v, 0))
+        ctk.CTkLabel(tab, text="  DÜŞÜK = çember merkezine yakın / YÜKSEK = kenara yakın", text_color="gray").pack()
+
+        # ── Varsayılan & Kaydet ──
+        f_reset = ctk.CTkFrame(tab)
+        f_reset.pack(fill="x", padx=10, pady=(15, 5))
+        self.btn_defaults = ctk.CTkButton(f_reset, text="↺ Varsayılana Döndür", fg_color="gray", hover_color="#555",
+                                           command=self._reset_to_defaults)
+        self.btn_defaults.pack(side="left", padx=10, pady=5)
+
+        # Kaydedilmiş config değerlerini slider'lara yükle
+        self._load_sliders_from_config()
+
+    def _reset_to_defaults(self):
+        """Tüm ince ayar slider'larını varsayılan değerlere döndürür ve kaydeder."""
+        from fishing_bot.config import HumanConfig, FishDetectConfig, AutoBotConfig
+        h = HumanConfig()
+        f = FishDetectConfig()
+        a = AutoBotConfig()
+
+        self.slider_reaction.set(int(h.reaction_min * 1000))
+        self.lbl_reaction.configure(text=str(int(h.reaction_min * 1000)))
+        self.slider_cooldown.set(int(h.click_cooldown * 1000))
+        self.lbl_cooldown.configure(text=str(int(h.click_cooldown * 1000)))
+        self.slider_maxclicks.set(a.max_clicks_per_minigame)
+        self.lbl_maxclicks.configure(text=str(a.max_clicks_per_minigame))
+        self.slider_body_offset.set(int(f.fish_body_offset_y * 100))
+        self.lbl_body_offset.configure(text=str(int(f.fish_body_offset_y * 100)))
+        self.slider_hjitter.set(h.horizontal_jitter_px)
+        self.lbl_hjitter.configure(text=str(h.horizontal_jitter_px))
+        self.slider_lead.set(h.prediction_lead_factor)
+        self.lbl_lead.configure(text=f"{h.prediction_lead_factor:.2f}")
+        self.slider_maxlead.set(h.prediction_max_lead_px)
+        self.lbl_maxlead.configure(text=str(h.prediction_max_lead_px))
+        self.slider_predth.set(int(h.prediction_speed_threshold))
+        self.lbl_predth.configure(text=str(int(h.prediction_speed_threshold)))
+        self.slider_margin.set(int(h.click_inner_margin * 100))
+        self.lbl_margin.configure(text=str(int(h.click_inner_margin * 100)))
+
+        self._apply_sliders_to_config()
+        self.log("Tüm ayarlar varsayılana döndürüldü ve kaydedildi.")
+
+    def _load_sliders_from_config(self):
+        """Config'teki kayıtlı değerleri slider'lara geri yükler (başlangıçta)."""
+        c = self.config
+        self.slider_reaction.set(int(c.human.reaction_min * 1000))
+        self.lbl_reaction.configure(text=str(int(c.human.reaction_min * 1000)))
+        self.slider_cooldown.set(int(c.human.click_cooldown * 1000))
+        self.lbl_cooldown.configure(text=str(int(c.human.click_cooldown * 1000)))
+        self.slider_maxclicks.set(c.autobot.max_clicks_per_minigame)
+        self.lbl_maxclicks.configure(text=str(c.autobot.max_clicks_per_minigame))
+        self.slider_body_offset.set(int(c.fish.fish_body_offset_y * 100))
+        self.lbl_body_offset.configure(text=str(int(c.fish.fish_body_offset_y * 100)))
+        self.slider_hjitter.set(c.human.horizontal_jitter_px)
+        self.lbl_hjitter.configure(text=str(c.human.horizontal_jitter_px))
+        self.slider_lead.set(c.human.prediction_lead_factor)
+        self.lbl_lead.configure(text=f"{c.human.prediction_lead_factor:.2f}")
+        self.slider_maxlead.set(c.human.prediction_max_lead_px)
+        self.lbl_maxlead.configure(text=str(c.human.prediction_max_lead_px))
+        self.slider_predth.set(int(c.human.prediction_speed_threshold))
+        self.lbl_predth.configure(text=str(int(c.human.prediction_speed_threshold)))
+        self.slider_margin.set(int(c.human.click_inner_margin * 100))
+        self.lbl_margin.configure(text=str(int(c.human.click_inner_margin * 100)))
+
     def _build_extras_tab(self):
         tab = self.tabview.tab("Zırh & Ekstralar")
         
@@ -218,6 +388,31 @@ class FishingBotGUI(ctk.CTk):
     def log(self, message: str):
         self.log_textbox.insert("end", f"[{time.strftime('%H:%M:%S')}] {message}\n")
         self.log_textbox.see("end")
+
+    def _on_slider_update(self, label: ctk.CTkLabel, value: float, decimals: int):
+        """Slider değeri değiştiğinde etiketi ve config'i CANLI günceller."""
+        if decimals == 0:
+            label.configure(text=str(int(value)))
+        else:
+            label.configure(text=f"{value:.{decimals}f}")
+        # Config'e anında yaz — bot çalışırken değişiklikler hemen etki eder
+        self._apply_sliders_to_config()
+
+    def _apply_sliders_to_config(self):
+        """Tüm slider değerlerini config nesnesine yazar ve OTOMATİK KAYDEDER."""
+        reaction_ms = int(self.slider_reaction.get())
+        self.config.human.reaction_min = reaction_ms / 1000.0
+        self.config.human.reaction_max = (reaction_ms + 50) / 1000.0
+        self.config.human.click_cooldown = self.slider_cooldown.get() / 1000.0
+        self.config.autobot.max_clicks_per_minigame = int(self.slider_maxclicks.get())
+        self.config.fish.fish_body_offset_y = self.slider_body_offset.get() / 100.0
+        self.config.human.horizontal_jitter_px = int(self.slider_hjitter.get())
+        self.config.human.prediction_lead_factor = round(self.slider_lead.get(), 2)
+        self.config.human.prediction_max_lead_px = int(self.slider_maxlead.get())
+        self.config.human.prediction_speed_threshold = float(self.slider_predth.get())
+        self.config.human.click_inner_margin = self.slider_margin.get() / 100.0
+        # Her değişiklikte otomatik kaydet
+        self.config.save_calibration()
         
     def update_status(self, status: str, catches: int, casts: int):
         # Arayüz güncellemeleri ana thread'de yapılmalı
@@ -244,7 +439,8 @@ class FishingBotGUI(ctk.CTk):
             self.config.autobot.use_armor_trick = self.switch_armor.get() == 1
             self.config.autobot.use_fatigue_system = self.switch_fatigue.get() == 1
             self.config.autobot.auto_drop_trash = self.switch_trash.get() == 1
-            
+            self._apply_sliders_to_config()  # İnce ayarları uygula
+
             # Başlat
             self.btn_start.configure(text="⏹ Durdur", fg_color="red", hover_color="darkred")
             self.btn_calibrate.configure(state="disabled")

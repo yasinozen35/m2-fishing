@@ -242,7 +242,7 @@ class BotLogic:
             else:
                 self._circle_missing_count = 0
                 # Maksimum 8 tık — 15sn minigame'de ~0.5sn aralıklarla doğal ritim
-                if self._click_count_in_minigame >= 8:
+                if self._click_count_in_minigame >= self._cfg.max_clicks_per_minigame:
                     status_msg = f"MINIGAME: {self._click_count_in_minigame} tik tamam, circle kapaniyor..."
                     return False, status_msg
                 # Balık içerdeyse işle
@@ -336,10 +336,11 @@ class BotLogic:
                         target_y = int(current_y + vy * look_ahead)
 
                         # Ek lead: balık yönüne doğru ekstra offset
+                        # lead_factor ayarlanabilir: 0.3=az lead, 1.2=çok lead
                         if speed > 0:
                             lead_px = min(
                                 self._clicker._human.prediction_max_lead_px,
-                                int(speed * look_ahead * 0.7)
+                                int(speed * look_ahead * self._clicker._human.prediction_lead_factor)
                             )
                             target_x = int(target_x + (vx / speed) * lead_px)
                             target_y = int(target_y + (vy / speed) * lead_px)
@@ -351,15 +352,20 @@ class BotLogic:
                     circle_cy = detection.circle.center_y
                     target_dist = math.hypot(target_x - circle_cx, target_y - circle_cy)
 
-                    # Maksimum izin verilen mesafe: çember yarıçapının %90'ı
-                    # (inner_margin 0.95 ile tutarlı, ama tıklama için biraz daha güvenli)
-                    max_click_radius = int(detection.circle.radius * 0.90)
+                    # Maksimum izin verilen mesafe: config'den ayarlanabilir
+                    # Varsayılan %90, GUI'den 0.75-0.95 arası ayarlanabilir
+                    max_click_radius = int(detection.circle.radius * self._clicker._human.click_inner_margin)
 
                     if target_dist > max_click_radius and target_dist > 0:
                         # Hedefi çember sınırına geri çek (yönde clamp)
                         scale = max_click_radius / target_dist
                         target_x = int(circle_cx + (target_x - circle_cx) * scale)
                         target_y = int(circle_cy + (target_y - circle_cy) * scale)
+
+                    # ── YATAY JITTER: Balığın sağına/soluna rastgele tıkla ──
+                    h_jitter = self._clicker._human.horizontal_jitter_px
+                    if h_jitter > 0:
+                        target_x += random.randint(-h_jitter, h_jitter)
 
                     # ── TIKLAMA KARARI ──
                     if self._clicker.is_ready:

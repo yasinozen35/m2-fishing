@@ -4,5 +4,18 @@
     "capture_width": 247,
     "capture_height": 202,
     "armor_x": 1139,
-    "armor_y": 645
+    "armor_y": 645,
+    "reaction_min": 0.1,
+    "reaction_max": 0.15,
+    "click_cooldown": 0.35,
+    "aim_offset_px": 3,
+    "horizontal_jitter_px": 0,
+    "prediction_look_ahead_base": 0.1,
+    "prediction_look_ahead_max": 0.18,
+    "prediction_speed_threshold": 30.0,
+    "prediction_max_lead_px": 22,
+    "prediction_lead_factor": 0.6,
+    "click_inner_margin": 0.9,
+    "fish_body_offset_y": 0.36,
+    "max_clicks_per_minigame": 12
 }

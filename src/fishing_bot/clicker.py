@@ -9,6 +9,7 @@ hafif koordinat sapması ile insan davranışını simüle eder.
 import random
 import sys
 import time
+import math
 
 import pyautogui
 
@@ -213,33 +214,69 @@ class HumanClicker:
         screen_x = self._capture.left + (local_x // scale)
         screen_y = self._capture.top + (local_y // scale)
 
-        # ── 2. İnsansı mikro sapma (±N px) ──
+        # ── 2. İnsansı sapma (Gaussian veya Uniform) ──
         offset = self._human.aim_offset_px
-        jitter_x = random.randint(-offset, offset)
-        jitter_y = random.randint(-offset, offset)
+        if self._human.use_gaussian_jitter:
+            # Gaussian: merkeze yakın atışlar daha sık (insan gibi)
+            jitter_x = int(random.gauss(0, offset / 2.5))
+            jitter_y = int(random.gauss(0, offset / 2.5))
+            jitter_x = max(-offset, min(offset, jitter_x))
+            jitter_y = max(-offset, min(offset, jitter_y))
+        else:
+            jitter_x = random.randint(-offset, offset)
+            jitter_y = random.randint(-offset, offset)
         final_x = screen_x + jitter_x
         final_y = screen_y + jitter_y
 
-        # ── 3. Hızlı ama insansı tıklama (SENKRON — minigame kritik yol) ──
-        # NOT: Asenkron değil çünkü minigame'de tıklama sonrası state güncellemesi
-        # hemen yapılmalı. Toplam süre ~15-30ms olduğu için ana döngüyü bloklamaz.
+        # ── 3. Mikro-hareketli tıklama (Anti-Cheat) ──
+        # İnsan 20px için bile ışınlanmaz — 2-4 adımda varır (8-20ms)
         try:
+            import pyautogui
             import pydirectinput
-            # Direkt pozisyonla (insan mikro-ayar hareketi)
-            pydirectinput.moveTo(int(final_x), int(final_y))
-            # Mikro bekleme: OS'nin mouse event'ini işlemesi için minimum süre
-            time.sleep(0.005)
+
+            if self._human.use_micro_movement:
+                cur_x, cur_y = pyautogui.position()
+                dist = math.hypot(final_x - cur_x, final_y - cur_y)
+                if dist > 3:
+                    steps = self._human.micro_movement_steps
+                    for i in range(1, steps + 1):
+                        t = i / steps
+                        mx = int(cur_x + (final_x - cur_x) * t)
+                        my = int(cur_y + (final_y - cur_y) * t)
+                        ctypes.windll.user32.SetCursorPos(mx, my)
+                        time.sleep(random.uniform(0.002, 0.005))
+                else:
+                    ctypes.windll.user32.SetCursorPos(int(final_x), int(final_y))
+            else:
+                pydirectinput.moveTo(int(final_x), int(final_y))
+
+            # OS'nin event'i işlemesi için mikro bekleme
+            time.sleep(0.004)
             pydirectinput.mouseDown()
-            # İnsan parmak kası: bas-çek arası 15-30ms
             time.sleep(random.uniform(0.015, 0.030))
             pydirectinput.mouseUp()
         except Exception:
-            # Fallback: Win32 API direkt
-            ctypes.windll.user32.SetCursorPos(int(final_x), int(final_y))
-            time.sleep(0.005)
-            ctypes.windll.user32.mouse_event(0x0002, 0, 0, 0, 0)  # LEFTDOWN
+            # Fallback: Win32 API
+            if self._human.use_micro_movement:
+                import pyautogui as _pg
+                cur_x, cur_y = _pg.position()
+                dist = math.hypot(final_x - cur_x, final_y - cur_y)
+                if dist > 3:
+                    steps = self._human.micro_movement_steps
+                    for i in range(1, steps + 1):
+                        t = i / steps
+                        mx = int(cur_x + (final_x - cur_x) * t)
+                        my = int(cur_y + (final_y - cur_y) * t)
+                        ctypes.windll.user32.SetCursorPos(mx, my)
+                        time.sleep(random.uniform(0.002, 0.005))
+                else:
+                    ctypes.windll.user32.SetCursorPos(int(final_x), int(final_y))
+            else:
+                ctypes.windll.user32.SetCursorPos(int(final_x), int(final_y))
+            time.sleep(0.004)
+            ctypes.windll.user32.mouse_event(0x0002, 0, 0, 0, 0)
             time.sleep(random.uniform(0.015, 0.030))
-            ctypes.windll.user32.mouse_event(0x0004, 0, 0, 0, 0)  # LEFTUP
+            ctypes.windll.user32.mouse_event(0x0004, 0, 0, 0, 0)
 
         self._last_click_time = time.time()
         return True

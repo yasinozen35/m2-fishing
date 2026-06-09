@@ -16,6 +16,19 @@
     "prediction_max_lead_px": 22,
     "prediction_lead_factor": 0.6,
     "click_inner_margin": 0.9,
+    "use_gaussian_jitter": true,
+    "use_micro_movement": true,
+    "detection_blind_spot_rate": 0.02,
+    "transition_hesitation_min": 0.03,
+    "transition_hesitation_max": 0.12,
+    "prediction_noise_sigma": 0.15,
+    "use_dynamic_rhythm": true,
+    "rhythm_noise_sigma": 0.12,
+    "intentional_miss_rate": 0.08,
+    "fast_fish_miss_rate": 0.18,
+    "use_fps_jitter": true,
+    "fps_jitter_rate": 0.03,
     "fish_body_offset_y": 0.36,
-    "max_clicks_per_minigame": 12
+    "max_clicks_per_minigame": 12,
+    "timing_randomization": 0.3
 }

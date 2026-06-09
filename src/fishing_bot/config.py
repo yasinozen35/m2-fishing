@@ -141,6 +141,29 @@ class HumanConfig:
     prediction_lead_factor: float = 0.7        # Lead çarpanı (0.3=az lead, 1.2=çok lead)
     click_inner_margin: float = 0.90           # Çember içi tıklama sınırı (0.75-0.95)
 
+    # ── Anti-Cheat Gizlenme Parametreleri ──
+    # Gaussian jitter: uniform yerine normal dağılım (daha insansı)
+    use_gaussian_jitter: bool = True
+    # Mikro mouse hareketi: ışınlanma yerine 2-4 adımlı hareket
+    use_micro_movement: bool = True
+    micro_movement_steps: int = 3              # Kaç adımda varılsın (2-5)
+    # Tespit kör noktası: circle tespitini kasıtlı kaçırma oranı
+    detection_blind_spot_rate: float = 0.02    # %2 frame'de circle "görme"
+    # State geçiş tereddütü
+    transition_hesitation_min: float = 0.03    # 30ms min tereddüt
+    transition_hesitation_max: float = 0.12    # 120ms max tereddüt
+    # Prediction gürültüsü: lead'i kasıtlı over/under-shoot
+    prediction_noise_sigma: float = 0.15       # Gauss σ (0=optimal, 0.3=insansı hata)
+    # Dinamik ritim: sabit pattern yerine prosedürel
+    use_dynamic_rhythm: bool = True
+    rhythm_noise_sigma: float = 0.12           # Ritim Gauss σ
+    # Bilerek kaçırma oranları
+    intentional_miss_rate: float = 0.08        # Normal balık kaçırma
+    fast_fish_miss_rate: float = 0.18          # Hızlı balık kaçırma (insan daha çok kaçırır)
+    # FPS jitter: frame'leri rastgele geciktir
+    use_fps_jitter: bool = True
+    fps_jitter_rate: float = 0.03              # %3 frame'de gecikme
+
 
 @dataclass
 class AutoBotConfig:
@@ -172,6 +195,9 @@ class AutoBotConfig:
 
     # Minigame başına maksimum tıklama sayısı
     max_clicks_per_minigame: int = 8
+
+    # Zamanlama rastgeleliği: sabit delay'leri ±% oranında rastgeleleştir
+    timing_randomization: float = 0.30         # ±%30 gürültü
 
 
 @dataclass
@@ -218,10 +244,24 @@ class Config:
             "prediction_max_lead_px": self.human.prediction_max_lead_px,
             "prediction_lead_factor": self.human.prediction_lead_factor,
             "click_inner_margin": self.human.click_inner_margin,
+            # Human — anti-cheat
+            "use_gaussian_jitter": self.human.use_gaussian_jitter,
+            "use_micro_movement": self.human.use_micro_movement,
+            "detection_blind_spot_rate": self.human.detection_blind_spot_rate,
+            "transition_hesitation_min": self.human.transition_hesitation_min,
+            "transition_hesitation_max": self.human.transition_hesitation_max,
+            "prediction_noise_sigma": self.human.prediction_noise_sigma,
+            "use_dynamic_rhythm": self.human.use_dynamic_rhythm,
+            "rhythm_noise_sigma": self.human.rhythm_noise_sigma,
+            "intentional_miss_rate": self.human.intentional_miss_rate,
+            "fast_fish_miss_rate": self.human.fast_fish_miss_rate,
+            "use_fps_jitter": self.human.use_fps_jitter,
+            "fps_jitter_rate": self.human.fps_jitter_rate,
             # Fish
             "fish_body_offset_y": self.fish.fish_body_offset_y,
             # AutoBot
             "max_clicks_per_minigame": self.autobot.max_clicks_per_minigame,
+            "timing_randomization": self.autobot.timing_randomization,
         }
         try:
             with open(filepath, "w", encoding="utf-8") as f:
@@ -258,9 +298,23 @@ class Config:
                     self.human.prediction_max_lead_px = data.get("prediction_max_lead_px", self.human.prediction_max_lead_px)
                     self.human.prediction_lead_factor = data.get("prediction_lead_factor", self.human.prediction_lead_factor)
                     self.human.click_inner_margin = data.get("click_inner_margin", self.human.click_inner_margin)
+                    # Human — anti-cheat
+                    self.human.use_gaussian_jitter = data.get("use_gaussian_jitter", self.human.use_gaussian_jitter)
+                    self.human.use_micro_movement = data.get("use_micro_movement", self.human.use_micro_movement)
+                    self.human.detection_blind_spot_rate = data.get("detection_blind_spot_rate", self.human.detection_blind_spot_rate)
+                    self.human.transition_hesitation_min = data.get("transition_hesitation_min", self.human.transition_hesitation_min)
+                    self.human.transition_hesitation_max = data.get("transition_hesitation_max", self.human.transition_hesitation_max)
+                    self.human.prediction_noise_sigma = data.get("prediction_noise_sigma", self.human.prediction_noise_sigma)
+                    self.human.use_dynamic_rhythm = data.get("use_dynamic_rhythm", self.human.use_dynamic_rhythm)
+                    self.human.rhythm_noise_sigma = data.get("rhythm_noise_sigma", self.human.rhythm_noise_sigma)
+                    self.human.intentional_miss_rate = data.get("intentional_miss_rate", self.human.intentional_miss_rate)
+                    self.human.fast_fish_miss_rate = data.get("fast_fish_miss_rate", self.human.fast_fish_miss_rate)
+                    self.human.use_fps_jitter = data.get("use_fps_jitter", self.human.use_fps_jitter)
+                    self.human.fps_jitter_rate = data.get("fps_jitter_rate", self.human.fps_jitter_rate)
                     # Fish
                     self.fish.fish_body_offset_y = data.get("fish_body_offset_y", self.fish.fish_body_offset_y)
                     # AutoBot
                     self.autobot.max_clicks_per_minigame = data.get("max_clicks_per_minigame", self.autobot.max_clicks_per_minigame)
+                    self.autobot.timing_randomization = data.get("timing_randomization", self.autobot.timing_randomization)
             except Exception as e:
                 print(f"Ayarlar yuklenemedi: {e}")

@@ -61,11 +61,13 @@ class BotLogic:
         # MINIGAME: tıklama ritim pattern'i (insansı çeşitlilik)
         self._click_rhythm: list[float] = []
         self._click_rhythm_idx: int = 0
-        # MINIGAME: bilerek ıskalama (her ~8 balıkta bir)
-        self._intentional_miss: bool = False
+        # MINIGAME: bilerek ıskalama sayacı
         self._catch_streak: int = 0
         # WAITING: idle mouse hareket zamanlayıcısı
         self._last_idle_move: float = 0.0
+        # WAITING: state geçiş tereddütü
+        self._hesitation_start: float = 0.0
+        self._hesitation_duration: float = 0.0
         # MINIGAME: İnsansı reaksiyon gecikmesi sistemi
         self._reaction_delay: float = 0.0       # Bu tıklama için random reaksiyon süresi
         self._fish_entered_safe_at: float = 0.0  # Balık safe zone'a ilk girdiği an
@@ -129,7 +131,7 @@ class BotLogic:
                     status_msg = "Hazirlik: Normal Yem takildi"
 
                 # 1 saniye bekle (±random) — yem takıldıktan sonra olta atmak için
-                self._block_until = now + random.uniform(0.90, 1.20)
+                self._block_until = now + self._randomize_delay(1.05)
 
             # Yem takma sonrası bekleme süresi doldu mu?
             if now < self._block_until:
@@ -151,7 +153,7 @@ class BotLogic:
                 elif not getattr(self, "_armor_trick_phase2", False):
                     self._armor_trick_phase2 = True
                     self._clicker.right_click_at(self._cfg.armor_x, self._cfg.armor_y)
-                    self._block_until = now + self._cfg.delay_after_armor
+                    self._block_until = now + self._randomize_delay(self._cfg.delay_after_armor)
                     status_msg = "Hazirlik: Zirh geri takildi"
                     return False, status_msg
                 elif now < self._block_until:
@@ -181,7 +183,7 @@ class BotLogic:
                 self._clicker.press_key(self._cfg.key_fish, hold_min=0.12, hold_max=0.25)
                 self.total_casts += 1
                 # Cast sonrası animasyon beklemesi başlat (bu sürede tespit yapma)
-                self._block_until = now + self._cfg.delay_after_cast
+                self._block_until = now + self._randomize_delay(self._cfg.delay_after_cast)
                 status_msg = "CAST: Olta atildi, animasyon bekleniyor..."
                 return False, status_msg
 
@@ -211,12 +213,32 @@ class BotLogic:
                 except Exception:
                     pass  # Mouse hareketi başarısız olursa sessizce devam et
 
-            # Daire tespit edilirse MINIGAME'e geç (anında, bekleme yok)
+            # Daire tespit edilirse MINIGAME'e geç
             if detection.circle is not None:
+                # ── Tespit Kör Noktası (Anti-Cheat) ──
+                # %2-3 ihtimalle circle'ı "görme" (insan bazen kaçırır)
+                blind_spot = self._clicker._human.detection_blind_spot_rate
+                if blind_spot > 0 and random.random() < blind_spot:
+                    status_msg = "Balik bekleniyor... (gozden kacti)"
+                    return False, status_msg
+
+                # ── State Geçiş Tereddütü (Anti-Cheat) ──
+                # Circle görüldü ama hemen tepki verme — 30-120ms "düşün"
+                if self._hesitation_start == 0.0:
+                    self._hesitation_start = now
+                    self._hesitation_duration = random.uniform(
+                        self._clicker._human.transition_hesitation_min,
+                        self._clicker._human.transition_hesitation_max
+                    )
+                    return False, status_msg
+                if now - self._hesitation_start < self._hesitation_duration:
+                    return False, status_msg
+                self._hesitation_start = 0.0
                 self._transition_to(BotState.MINIGAME)
             else:
-                # Circle yok → sayacı sıfırla
+                # Circle yok → sayacı sıfırla, tereddütü de sıfırla
                 self._consecutive_circle_count = 0
+                self._hesitation_start = 0.0
 
             # Timeout (balık vurmadıysa veya kaçtıysa)
             if elapsed > self._cfg.timeout_waiting_fish:
@@ -342,6 +364,12 @@ class BotLogic:
                                 self._clicker._human.prediction_max_lead_px,
                                 int(speed * look_ahead * self._clicker._human.prediction_lead_factor)
                             )
+                            # ── Prediction Gürültüsü (Anti-Cheat) ──
+                            # İnsan her zaman optimal lead yapamaz — over/under-shoot
+                            noise_sigma = self._clicker._human.prediction_noise_sigma
+                            if noise_sigma > 0:
+                                lead_px = int(lead_px * random.gauss(1.0, noise_sigma))
+                                lead_px = max(0, lead_px)  # Negatif olmasın
                             target_x = int(target_x + (vx / speed) * lead_px)
                             target_y = int(target_y + (vy / speed) * lead_px)
 
@@ -369,14 +397,19 @@ class BotLogic:
 
                     # ── TIKLAMA KARARI ──
                     if self._clicker.is_ready:
-                        # ── Bilerek Iskalama (~%12 ihtimal) ──
-                        if self._intentional_miss and self._click_count_in_minigame >= 2:
-                            self._intentional_miss = False
+                        # ── Bilerek Iskalama (hız-bazlı) ──
+                        # Hızlı balıkta kaçırma oranı daha yüksek
+                        _miss_rate = self._clicker._human.intentional_miss_rate
+                        if speed > 100:
+                            _miss_rate = self._clicker._human.fast_fish_miss_rate
+                        _should_miss = random.random() < _miss_rate
+                        if _should_miss and self._click_count_in_minigame >= 1:
+                            # Tıklamayı ATLA (bilerek kaçır)
                             self._clicker._last_click_time = time.time()
-                            # Reaksiyonu sıfırla — yeni tık için yeniden bekle
                             self._fish_was_inside = False
                             self._fish_entered_safe_at = 0.0
                             self._reaction_delay = 0.0
+                            self._click_count_in_minigame += 1  # Tık sayılır ama aslında kaçırdık
                             return False, status_msg
 
                         # Tahmin edilen noktaya HIZLI tıkla (bezier'siz, insansı)
@@ -416,7 +449,7 @@ class BotLogic:
                             self._clicker.drag_and_drop(tx, ty, 50, 50)
                             # 'Yere at' onay diyalogu için Enter bas.
                             self._clicker.press_key('enter')
-                            time.sleep(0.5)
+                            time.sleep(random.uniform(0.35, 0.55))
                 
                 # Balıkları aç
                 if self._cfg.auto_open_fishes and self._capture is not None and detector is not None:
@@ -428,10 +461,14 @@ class BotLogic:
                         status_msg = f"Envanterde {len(fishes)} balik aciliyor..."
                         for fx, fy in fishes:
                             self._clicker.right_click_at(fx, fy)
-                            time.sleep(0.1)
-            
-            # Animasyon beklemesi
-            if elapsed > self._cfg.delay_after_catch:
+                            time.sleep(random.uniform(0.08, 0.15))
+
+            # Animasyon beklemesi (rastgeleleştirilmiş)
+            _postcatch_delay = getattr(self, "_postcatch_target_delay", 0.0)
+            if _postcatch_delay == 0.0:
+                self._postcatch_target_delay = self._randomize_delay(self._cfg.delay_after_catch)
+                _postcatch_delay = self._postcatch_target_delay
+            if elapsed > _postcatch_delay:
                 # Yorulma (Fatigue) kontrolü
                 if self._cfg.use_fatigue_system and time.time() > self._next_fatigue_time:
                     self._fatigue_duration = random.uniform(
@@ -456,6 +493,11 @@ class BotLogic:
 
         return clicked, status_msg
 
+    def _randomize_delay(self, base_delay: float) -> float:
+        """Sabit delay'e ±% insansı gürültü ekler (Anti-Cheat)."""
+        r = self._cfg.timing_randomization
+        return base_delay * random.uniform(1.0 - r, 1.0 + r)
+
     def _transition_to(self, new_state: BotState) -> None:
         """Durum değiştirir ve zamanlayıcıyı sıfırlar."""
         self.state = new_state
@@ -471,30 +513,38 @@ class BotLogic:
             self._fish_entered_safe_at = 0.0
             self._fish_was_inside = False
 
-            # ── Rastgele Tıklama Ritim Pattern'i ──
-            # Her minigame'de farklı ritim (insansı çeşitlilik)
+            # ── DİNAMİK Tıklama Ritmi (Anti-Cheat) ──
+            # Sabit 5 pattern YERİNE: prosedürel Gauss gürültüsü ile canlı üretim
             base_cooldown = self._clicker._human.click_cooldown
-            patterns = [
-                [base_cooldown, base_cooldown * 1.1, base_cooldown * 0.9],       # Dengeli
-                [base_cooldown * 0.85, base_cooldown * 0.9, base_cooldown * 1.2], # Hızlıdan yavaşa
-                [base_cooldown * 1.15, base_cooldown * 0.85, base_cooldown * 0.9],# Yavaştan hızlıya
-                [base_cooldown * 0.95, base_cooldown * 1.1, base_cooldown * 0.95],# Düzensiz
-                [base_cooldown * 1.05, base_cooldown * 0.8, base_cooldown * 1.1], # Karışık
-            ]
-            self._click_rhythm = random.choice(patterns)
+            if self._clicker._human.use_dynamic_rhythm:
+                sigma = self._clicker._human.rhythm_noise_sigma
+                self._click_rhythm = [
+                    base_cooldown * random.gauss(1.0, sigma),
+                    base_cooldown * random.gauss(1.0, sigma),
+                    base_cooldown * random.gauss(1.0, sigma),
+                    base_cooldown * random.gauss(1.0, sigma),
+                    base_cooldown * random.gauss(1.0, sigma),
+                ]
+            else:
+                patterns = [
+                    [base_cooldown, base_cooldown * 1.1, base_cooldown * 0.9],
+                    [base_cooldown * 0.85, base_cooldown * 0.9, base_cooldown * 1.2],
+                    [base_cooldown * 1.15, base_cooldown * 0.85, base_cooldown * 0.9],
+                    [base_cooldown * 0.95, base_cooldown * 1.1, base_cooldown * 0.95],
+                    [base_cooldown * 1.05, base_cooldown * 0.8, base_cooldown * 1.1],
+                ]
+                self._click_rhythm = random.choice(patterns)
             self._click_rhythm_idx = 0
 
-            # ── Bilerek Iskalama (her ~8 balıkta bir) ──
+            # ── Bilerek Iskalama: her minigame'de sayaç artar ──
             self._catch_streak += 1
-            self._intentional_miss = (self._catch_streak >= random.randint(7, 10))
-            if self._intentional_miss:
-                self._catch_streak = 0  # Sayaç sıfırla
         elif new_state == BotState.PREPARE:
             self._prepare_action_done = False
             self._armor_trick_done = False
             self._armor_trick_phase2 = False
         elif new_state == BotState.POST_CATCH:
             self._postcatch_action_done = False
+            self._postcatch_target_delay = 0.0  # Her seferinde yeni rastgele değer
         elif new_state == BotState.CAST:
             self._cast_done = False
             self._cast_pressed = False

@@ -105,7 +105,7 @@ class FishingBotGUI(ctk.CTk):
         super().__init__()
         
         self.title("🎣 Metin2 Otonom Balık Botu V2")
-        self.geometry("700x700")
+        self.geometry("700x1000")
         self.config = Config()
         self.bot_thread: Optional[BotRunnerThread] = None
         
@@ -294,9 +294,28 @@ class FishingBotGUI(ctk.CTk):
         self.slider_margin.configure(command=lambda v: self._on_slider_update(self.lbl_margin, v, 0))
         ctk.CTkLabel(tab, text="  DÜŞÜK = çember merkezine yakın / YÜKSEK = kenara yakın", text_color="gray").pack()
 
+        # ── Anti-Cheat Koruma ──
+        ctk.CTkLabel(tab, text="Anti-Cheat Koruma", font=ctk.CTkFont(weight="bold")).pack(pady=(15, 5))
+
+        self.switch_gauss = ctk.CTkSwitch(tab, text="Gaussian Jitter (Uniform yerine normal dağılım)")
+        self.switch_gauss.pack(pady=2)
+        self.switch_gauss.select()
+
+        self.switch_micro = ctk.CTkSwitch(tab, text="Mikro Mouse Hareketi (Işınlanma yerine adımlı)")
+        self.switch_micro.pack(pady=2)
+        self.switch_micro.select()
+
+        self.switch_dynrhythm = ctk.CTkSwitch(tab, text="Dinamik Ritim (Sabit pattern yerine prosedürel)")
+        self.switch_dynrhythm.pack(pady=2)
+        self.switch_dynrhythm.select()
+
+        self.switch_fpsjitter = ctk.CTkSwitch(tab, text="FPS Jitter (Frame'leri rastgele geciktir)")
+        self.switch_fpsjitter.pack(pady=2)
+        self.switch_fpsjitter.select()
+
         # ── Varsayılan & Kaydet ──
         f_reset = ctk.CTkFrame(tab)
-        f_reset.pack(fill="x", padx=10, pady=(15, 5))
+        f_reset.pack(fill="x", padx=10, pady=(10, 5))
         self.btn_defaults = ctk.CTkButton(f_reset, text="↺ Varsayılana Döndür", fg_color="gray", hover_color="#555",
                                            command=self._reset_to_defaults)
         self.btn_defaults.pack(side="left", padx=10, pady=5)
@@ -330,6 +349,12 @@ class FishingBotGUI(ctk.CTk):
         self.slider_margin.set(int(h.click_inner_margin * 100))
         self.lbl_margin.configure(text=str(int(h.click_inner_margin * 100)))
 
+        # Anti-cheat toggle'ları da varsayılana döndür
+        self.switch_gauss.select()
+        self.switch_micro.select()
+        self.switch_dynrhythm.select()
+        self.switch_fpsjitter.select()
+
         self._apply_sliders_to_config()
         self.log("Tüm ayarlar varsayılana döndürüldü ve kaydedildi.")
 
@@ -354,6 +379,23 @@ class FishingBotGUI(ctk.CTk):
         self.lbl_predth.configure(text=str(int(c.human.prediction_speed_threshold)))
         self.slider_margin.set(int(c.human.click_inner_margin * 100))
         self.lbl_margin.configure(text=str(int(c.human.click_inner_margin * 100)))
+        # Anti-cheat toggle'lar
+        if c.human.use_gaussian_jitter:
+            self.switch_gauss.select()
+        else:
+            self.switch_gauss.deselect()
+        if c.human.use_micro_movement:
+            self.switch_micro.select()
+        else:
+            self.switch_micro.deselect()
+        if c.human.use_dynamic_rhythm:
+            self.switch_dynrhythm.select()
+        else:
+            self.switch_dynrhythm.deselect()
+        if c.human.use_fps_jitter:
+            self.switch_fpsjitter.select()
+        else:
+            self.switch_fpsjitter.deselect()
 
     def _build_extras_tab(self):
         tab = self.tabview.tab("Zırh & Ekstralar")
@@ -411,6 +453,11 @@ class FishingBotGUI(ctk.CTk):
         self.config.human.prediction_max_lead_px = int(self.slider_maxlead.get())
         self.config.human.prediction_speed_threshold = float(self.slider_predth.get())
         self.config.human.click_inner_margin = self.slider_margin.get() / 100.0
+        # Anti-cheat toggle'lar
+        self.config.human.use_gaussian_jitter = self.switch_gauss.get() == 1
+        self.config.human.use_micro_movement = self.switch_micro.get() == 1
+        self.config.human.use_dynamic_rhythm = self.switch_dynrhythm.get() == 1
+        self.config.human.use_fps_jitter = self.switch_fpsjitter.get() == 1
         # Her değişiklikte otomatik kaydet
         self.config.save_calibration()
         

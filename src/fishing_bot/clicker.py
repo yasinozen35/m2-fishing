@@ -308,17 +308,50 @@ class HumanClicker:
         time.sleep(hold_time)
         gui_module.keyUp(key)
 
+    def left_click_screen(self, screen_x: int, screen_y: int) -> None:
+        """
+        Ekran koordinatına sol tık (Yes butonu vs için).
+        pydirectinput (SendInput) kullanır — DirectX oyunlarla uyumlu.
+        """
+        try:
+            import pydirectinput
+            # Mouse'u butonun üstüne SÜRÜKLE (oyun hover'ı algılasın)
+            pydirectinput.moveTo(int(screen_x), int(screen_y))
+            time.sleep(random.uniform(0.06, 0.12))  # Buton aktif olsun
+            pydirectinput.mouseDown()
+            time.sleep(random.uniform(0.08, 0.15))  # Basılı tut
+            pydirectinput.mouseUp()
+        except Exception:
+            # Fallback: Win32 API
+            ctypes.windll.user32.SetCursorPos(int(screen_x), int(screen_y))
+            time.sleep(random.uniform(0.06, 0.12))
+            ctypes.windll.user32.mouse_event(0x0002, 0, 0, 0, 0)
+            time.sleep(random.uniform(0.08, 0.15))
+            ctypes.windll.user32.mouse_event(0x0004, 0, 0, 0, 0)
+
     def right_click_at(self, screen_x: int, screen_y: int) -> None:
         """
         Belirtilen ekran koordinatına (Global koordinat) insan benzeri sağ tıklar.
         Zırh değişimi ve envanter yönetimi için kullanılır.
         """
-        # Mouse'u anında hareket ettir
-        gui_module.moveTo(screen_x, screen_y)
-        
+        # Mouse'u HIZLI hareket ettir (zırh trick için optimize)
+        try:
+            import pyautogui as _pg
+            cur_x, cur_y = _pg.position()
+            dist = math.hypot(screen_x - cur_x, screen_y - cur_y)
+            steps = 3 if dist > 50 else 1
+            for i in range(1, steps + 1):
+                t = i / steps
+                mx = int(cur_x + (screen_x - cur_x) * t)
+                my = int(cur_y + (screen_y - cur_y) * t)
+                ctypes.windll.user32.SetCursorPos(mx, my)
+                time.sleep(0.004)
+        except Exception:
+            ctypes.windll.user32.SetCursorPos(screen_x, screen_y)
+
         # Oyunun mouse'u algılaması için
-        time.sleep(random.uniform(0.05, 0.1))
-        
+        time.sleep(random.uniform(0.04, 0.07))
+
         # Sağ tıkla
         gui_module.rightClick() if hasattr(gui_module, 'rightClick') else gui_module.click(button='right')
 

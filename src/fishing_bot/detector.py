@@ -66,6 +66,7 @@ class Detector:
         self._fish_templates = []
         self._bait_templates = []
         self._trash_templates = []
+        self._button_yes_templates = []  # Normal + aktif hali
         self._load_templates()
 
     def _load_templates(self) -> None:
@@ -82,6 +83,8 @@ class Detector:
                     self._bait_templates.append(tpl)
                 elif filename.startswith("trash_"):
                     self._trash_templates.append(tpl)
+                elif filename.startswith("button_"):
+                    self._button_yes_templates.append(tpl)
                 else:
                     self._fish_templates.append(tpl)
 
@@ -465,6 +468,40 @@ class Detector:
 
     # ── Envanter Tespiti (Balık / Yem) ─────────────────────────────
     
+    def detect_yes_button(self, frame: np.ndarray, threshold: float = 0.65) -> tuple[int, int] | None:
+        """
+        Ekrandaki "Yes/Evet" butonunu template matching ile bulur.
+        Hem normal hem aktif (highlighted) halini dener.
+
+        Args:
+            frame: Tam ekran görüntü (BGR).
+            threshold: Eşleşme eşiği (0.0 - 1.0).
+
+        Returns:
+            (x, y): Butonun merkez koordinatı, bulunamazsa None.
+        """
+        if not self._button_yes_templates:
+            return None
+
+        best_val = 0.0
+        best_loc = None
+        best_tw, best_th = 0, 0
+
+        for tpl in self._button_yes_templates:
+            th, tw = tpl.shape[:2]
+            result = cv2.matchTemplate(frame, tpl, cv2.TM_CCOEFF_NORMED)
+            _, max_val, _, max_loc = cv2.minMaxLoc(result)
+            if max_val > best_val:
+                best_val = max_val
+                best_loc = max_loc
+                best_tw, best_th = tw, th
+
+        if best_val >= threshold and best_loc is not None:
+            cx = best_loc[0] + best_tw // 2
+            cy = best_loc[1] + best_th // 2
+            return (cx, cy)
+        return None
+
     def detect_inventory_items(self, frame: np.ndarray, item_type: str = "fish", threshold: float = 0.8) -> list[tuple[int, int]]:
         """
         Envanterde bulunan itemlerin koordinatlarını döndürür.

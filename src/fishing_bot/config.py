@@ -187,11 +187,19 @@ class AutoBotConfig:
     fatigue_duration_max: float = 12.0 * 60.0  # Maksimum mola süresi (saniye)
 
     # Döngü zamanlamaları (saniye)
-    delay_after_bait: float = 0.15   # Yem taktıktan sonra ÇOK KISA bekleme (random ekleniyor)
+    delay_after_bait: float = 1.5    # Yem taktıktan sonra olta atmadan önce bekleme (1.5sn)
     delay_after_armor: float = 0.3   # Zırh değiştirdikten sonra bekleme
-    delay_after_cast: float = 0.3    # Oltayı attıktan sonra kısa bekleme (2.0s çok uzundu, çember bu sırada kaçıyordu)
-    delay_after_catch: float = 3.0   # Minigame bittikten sonra 3sn bekle, sonra 1'e bas
-    timeout_waiting_fish: float = 30.0 # Suya attıktan sonra max bekleme süresi (45sn çok uzundu)
+    delay_after_cast: float = 0.3    # Oltayı attıktan sonra kısa bekleme
+    delay_after_catch: float = 3.0   # Minigame bittikten sonra bekleme
+    timeout_waiting_fish: float = 30.0 # Suya attıktan sonra max bekleme süresi
+
+    # Minigame sonrası yeniden olta atma zaman aşımı
+    # Minigame bittikten 10sn sonra hala yeni minigame başlamadıysa → space'e tekrar bas
+    retry_cast_timeout: float = 10.0
+
+    # Çöp atma hedef koordinatları (ekranın oyun dünyasına denk gelen bir yeri)
+    trash_drop_x: int = 400
+    trash_drop_y: int = 300
 
     # Minigame başına maksimum tıklama sayısı
     max_clicks_per_minigame: int = 8
@@ -231,6 +239,10 @@ class Config:
             # Zırh
             "armor_x": self.autobot.armor_x,
             "armor_y": self.autobot.armor_y,
+            "use_armor_trick": self.autobot.use_armor_trick,
+            "auto_open_fishes": self.autobot.auto_open_fishes,
+            "auto_drop_trash": self.autobot.auto_drop_trash,
+            "use_fatigue_system": self.autobot.use_fatigue_system,
             # Human — reaksiyon & tıklama
             "reaction_min": self.human.reaction_min,
             "reaction_max": self.human.reaction_max,
@@ -262,6 +274,10 @@ class Config:
             # AutoBot
             "max_clicks_per_minigame": self.autobot.max_clicks_per_minigame,
             "timing_randomization": self.autobot.timing_randomization,
+            "delay_after_bait": self.autobot.delay_after_bait,
+            "retry_cast_timeout": self.autobot.retry_cast_timeout,
+            "trash_drop_x": self.autobot.trash_drop_x,
+            "trash_drop_y": self.autobot.trash_drop_y,
         }
         try:
             with open(filepath, "w", encoding="utf-8") as f:
@@ -285,6 +301,10 @@ class Config:
                     # Zırh
                     self.autobot.armor_x = data.get("armor_x", self.autobot.armor_x)
                     self.autobot.armor_y = data.get("armor_y", self.autobot.armor_y)
+                    self.autobot.use_armor_trick = data.get("use_armor_trick", self.autobot.use_armor_trick)
+                    self.autobot.auto_open_fishes = data.get("auto_open_fishes", self.autobot.auto_open_fishes)
+                    self.autobot.auto_drop_trash = data.get("auto_drop_trash", self.autobot.auto_drop_trash)
+                    self.autobot.use_fatigue_system = data.get("use_fatigue_system", self.autobot.use_fatigue_system)
                     # Human — reaksiyon & tıklama
                     self.human.reaction_min = data.get("reaction_min", self.human.reaction_min)
                     self.human.reaction_max = data.get("reaction_max", self.human.reaction_max)
@@ -316,5 +336,9 @@ class Config:
                     # AutoBot
                     self.autobot.max_clicks_per_minigame = data.get("max_clicks_per_minigame", self.autobot.max_clicks_per_minigame)
                     self.autobot.timing_randomization = data.get("timing_randomization", self.autobot.timing_randomization)
+                    self.autobot.delay_after_bait = data.get("delay_after_bait", self.autobot.delay_after_bait)
+                    self.autobot.retry_cast_timeout = data.get("retry_cast_timeout", self.autobot.retry_cast_timeout)
+                    self.autobot.trash_drop_x = data.get("trash_drop_x", self.autobot.trash_drop_x)
+                    self.autobot.trash_drop_y = data.get("trash_drop_y", self.autobot.trash_drop_y)
             except Exception as e:
                 print(f"Ayarlar yuklenemedi: {e}")

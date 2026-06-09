@@ -104,7 +104,7 @@ class FishingBotGUI(ctk.CTk):
     def __init__(self):
         super().__init__()
         
-        self.title("🎣 Metin2 Otonom Balık Botu V2")
+        self.title("🎣 Yasin2 Otonom Balık Botu V2")
         self.geometry("700x1000")
         self.config = Config()
         self.bot_thread: Optional[BotRunnerThread] = None
@@ -118,7 +118,7 @@ class FishingBotGUI(ctk.CTk):
         self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
         self.sidebar_frame.grid_rowconfigure(4, weight=1)
         
-        self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="FishBot V2", font=ctk.CTkFont(size=20, weight="bold"))
+        self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="Yasin2 FishBot V2", font=ctk.CTkFont(size=20, weight="bold"))
         self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 10))
         
         self.btn_start = ctk.CTkButton(self.sidebar_frame, text="▶ Başlat", fg_color="green", hover_color="darkgreen", command=self.toggle_bot)
@@ -142,6 +142,9 @@ class FishingBotGUI(ctk.CTk):
         self._build_dashboard_tab()
         self._build_settings_tab()
         self._build_extras_tab()
+
+        # Tüm sekmeler oluştuktan sonra config'i slider'lara yükle
+        self._load_sliders_from_config()
         
     def _build_dashboard_tab(self):
         tab = self.tabview.tab("Ana Ekran")
@@ -222,6 +225,30 @@ class FishingBotGUI(ctk.CTk):
         self.slider_maxclicks.configure(command=lambda v: self._on_slider_update(self.lbl_maxclicks, v, 0))
         ctk.CTkLabel(tab, text="  Minigame başına max tık (3=min, 15=max)", text_color="gray").pack()
 
+        # 3b. Bait Gecikmesi (yem sonrası bekleme)
+        f_baitdelay = ctk.CTkFrame(tab)
+        f_baitdelay.pack(fill="x", padx=10, pady=2)
+        ctk.CTkLabel(f_baitdelay, text="Yem Gecikmesi (sn):", width=120).pack(side="left", padx=5)
+        self.slider_baitdelay = ctk.CTkSlider(f_baitdelay, from_=0.5, to=3.0, number_of_steps=25, width=200)
+        self.slider_baitdelay.pack(side="left", padx=5)
+        self.slider_baitdelay.set(1.5)
+        self.lbl_baitdelay = ctk.CTkLabel(f_baitdelay, text="1.5", width=40)
+        self.lbl_baitdelay.pack(side="left", padx=5)
+        self.slider_baitdelay.configure(command=lambda v: self._on_slider_update(self.lbl_baitdelay, v, 1))
+        ctk.CTkLabel(tab, text="  Yeme bastıktan sonra oltayı atmadan önce bekleme", text_color="gray").pack()
+
+        # 3c. Retry Zaman Aşımı
+        f_retry = ctk.CTkFrame(tab)
+        f_retry.pack(fill="x", padx=10, pady=2)
+        ctk.CTkLabel(f_retry, text="Retry Aşımı (sn):", width=120).pack(side="left", padx=5)
+        self.slider_retry = ctk.CTkSlider(f_retry, from_=5, to=30, number_of_steps=25, width=200)
+        self.slider_retry.pack(side="left", padx=5)
+        self.slider_retry.set(10)
+        self.lbl_retry = ctk.CTkLabel(f_retry, text="10", width=40)
+        self.lbl_retry.pack(side="left", padx=5)
+        self.slider_retry.configure(command=lambda v: self._on_slider_update(self.lbl_retry, v, 0))
+        ctk.CTkLabel(tab, text="  Minigame sonrası bu kadar saniyede başlamazsa space tekrar", text_color="gray").pack()
+
         # 4. Balık Vücut Ofseti
         f_body = ctk.CTkFrame(tab)
         f_body.pack(fill="x", padx=10, pady=2)
@@ -294,34 +321,12 @@ class FishingBotGUI(ctk.CTk):
         self.slider_margin.configure(command=lambda v: self._on_slider_update(self.lbl_margin, v, 0))
         ctk.CTkLabel(tab, text="  DÜŞÜK = çember merkezine yakın / YÜKSEK = kenara yakın", text_color="gray").pack()
 
-        # ── Anti-Cheat Koruma ──
-        ctk.CTkLabel(tab, text="Anti-Cheat Koruma", font=ctk.CTkFont(weight="bold")).pack(pady=(15, 5))
-
-        self.switch_gauss = ctk.CTkSwitch(tab, text="Gaussian Jitter (Uniform yerine normal dağılım)")
-        self.switch_gauss.pack(pady=2)
-        self.switch_gauss.select()
-
-        self.switch_micro = ctk.CTkSwitch(tab, text="Mikro Mouse Hareketi (Işınlanma yerine adımlı)")
-        self.switch_micro.pack(pady=2)
-        self.switch_micro.select()
-
-        self.switch_dynrhythm = ctk.CTkSwitch(tab, text="Dinamik Ritim (Sabit pattern yerine prosedürel)")
-        self.switch_dynrhythm.pack(pady=2)
-        self.switch_dynrhythm.select()
-
-        self.switch_fpsjitter = ctk.CTkSwitch(tab, text="FPS Jitter (Frame'leri rastgele geciktir)")
-        self.switch_fpsjitter.pack(pady=2)
-        self.switch_fpsjitter.select()
-
         # ── Varsayılan & Kaydet ──
         f_reset = ctk.CTkFrame(tab)
         f_reset.pack(fill="x", padx=10, pady=(10, 5))
         self.btn_defaults = ctk.CTkButton(f_reset, text="↺ Varsayılana Döndür", fg_color="gray", hover_color="#555",
                                            command=self._reset_to_defaults)
         self.btn_defaults.pack(side="left", padx=10, pady=5)
-
-        # Kaydedilmiş config değerlerini slider'lara yükle
-        self._load_sliders_from_config()
 
     def _reset_to_defaults(self):
         """Tüm ince ayar slider'larını varsayılan değerlere döndürür ve kaydeder."""
@@ -336,6 +341,10 @@ class FishingBotGUI(ctk.CTk):
         self.lbl_cooldown.configure(text=str(int(h.click_cooldown * 1000)))
         self.slider_maxclicks.set(a.max_clicks_per_minigame)
         self.lbl_maxclicks.configure(text=str(a.max_clicks_per_minigame))
+        self.slider_baitdelay.set(a.delay_after_bait)
+        self.lbl_baitdelay.configure(text=f"{a.delay_after_bait:.1f}")
+        self.slider_retry.set(int(a.retry_cast_timeout))
+        self.lbl_retry.configure(text=str(int(a.retry_cast_timeout)))
         self.slider_body_offset.set(int(f.fish_body_offset_y * 100))
         self.lbl_body_offset.configure(text=str(int(f.fish_body_offset_y * 100)))
         self.slider_hjitter.set(h.horizontal_jitter_px)
@@ -349,7 +358,17 @@ class FishingBotGUI(ctk.CTk):
         self.slider_margin.set(int(h.click_inner_margin * 100))
         self.lbl_margin.configure(text=str(int(h.click_inner_margin * 100)))
 
-        # Anti-cheat toggle'ları da varsayılana döndür
+        # Tüm toggle'ları varsayılana döndür
+        self.switch_armor.deselect()
+        self.switch_fatigue.select()
+        self.switch_trash.select()
+        self.switch_open_fish.select()
+        from fishing_bot.config import AutoBotConfig
+        a = AutoBotConfig()
+        self.entry_drop_x.delete(0, "end")
+        self.entry_drop_x.insert(0, str(a.trash_drop_x))
+        self.entry_drop_y.delete(0, "end")
+        self.entry_drop_y.insert(0, str(a.trash_drop_y))
         self.switch_gauss.select()
         self.switch_micro.select()
         self.switch_dynrhythm.select()
@@ -367,6 +386,10 @@ class FishingBotGUI(ctk.CTk):
         self.lbl_cooldown.configure(text=str(int(c.human.click_cooldown * 1000)))
         self.slider_maxclicks.set(c.autobot.max_clicks_per_minigame)
         self.lbl_maxclicks.configure(text=str(c.autobot.max_clicks_per_minigame))
+        self.slider_baitdelay.set(c.autobot.delay_after_bait)
+        self.lbl_baitdelay.configure(text=f"{c.autobot.delay_after_bait:.1f}")
+        self.slider_retry.set(int(c.autobot.retry_cast_timeout))
+        self.lbl_retry.configure(text=str(int(c.autobot.retry_cast_timeout)))
         self.slider_body_offset.set(int(c.fish.fish_body_offset_y * 100))
         self.lbl_body_offset.configure(text=str(int(c.fish.fish_body_offset_y * 100)))
         self.slider_hjitter.set(c.human.horizontal_jitter_px)
@@ -379,6 +402,36 @@ class FishingBotGUI(ctk.CTk):
         self.lbl_predth.configure(text=str(int(c.human.prediction_speed_threshold)))
         self.slider_margin.set(int(c.human.click_inner_margin * 100))
         self.lbl_margin.configure(text=str(int(c.human.click_inner_margin * 100)))
+        # Zırh switch'i + konum label'ı
+        if c.autobot.use_armor_trick:
+            self.switch_armor.select()
+        else:
+            self.switch_armor.deselect()
+        if c.autobot.armor_x > 0 and c.autobot.armor_y > 0:
+            self.lbl_armor_pos.configure(text=f"Zırh Konumu: X={c.autobot.armor_x}, Y={c.autobot.armor_y}")
+        else:
+            self.lbl_armor_pos.configure(text="Zırh Konumu: Ayarlanmadı")
+
+        # Otonom toggle'lar
+        if c.autobot.use_fatigue_system:
+            self.switch_fatigue.select()
+        else:
+            self.switch_fatigue.deselect()
+        if c.autobot.auto_drop_trash:
+            self.switch_trash.select()
+        else:
+            self.switch_trash.deselect()
+        if c.autobot.auto_open_fishes:
+            self.switch_open_fish.select()
+        else:
+            self.switch_open_fish.deselect()
+
+        # Çöp atma hedef koordinatları
+        self.entry_drop_x.delete(0, "end")
+        self.entry_drop_x.insert(0, str(c.autobot.trash_drop_x))
+        self.entry_drop_y.delete(0, "end")
+        self.entry_drop_y.insert(0, str(c.autobot.trash_drop_y))
+
         # Anti-cheat toggle'lar
         if c.human.use_gaussian_jitter:
             self.switch_gauss.select()
@@ -403,27 +456,73 @@ class FishingBotGUI(ctk.CTk):
         # Zırh Çıkar Tak
         ctk.CTkLabel(tab, text="Zırh Animasyon İptali (Çıkar/Tak)", font=ctk.CTkFont(weight="bold")).pack(pady=(10, 5))
         
-        self.switch_armor = ctk.CTkSwitch(tab, text="Zırh Tricki Aktif")
+        self.switch_armor = ctk.CTkSwitch(tab, text="Zırh Tricki Aktif",
+                                           command=self._on_extras_toggle)
         self.switch_armor.pack(pady=10)
-        
+
         self.lbl_armor_pos = ctk.CTkLabel(tab, text="Zırh Konumu: Ayarlanmadı")
         self.lbl_armor_pos.pack(pady=5)
-        
+
         self.btn_set_armor = ctk.CTkButton(tab, text="📍 Zırh Konumunu Seç", command=self.start_armor_pos_selection)
         self.btn_set_armor.pack(pady=5)
-        
+
         ctk.CTkLabel(tab, text="Not: Butona basınca 3 saniye içinde mouse'u\nenvanterdeki zırhın üstüne götürün.", text_color="gray").pack(pady=5)
 
-        # Otonom İnsanlaştırma ve Çöp Atma
+        # Otonom İnsanlaştırma ve Envanter
         ctk.CTkLabel(tab, text="Yapay Zeka & Organik Davranış", font=ctk.CTkFont(weight="bold")).pack(pady=(15, 5))
-        
-        self.switch_fatigue = ctk.CTkSwitch(tab, text="İnsan Yorulması (Mola Sistemi) Aktif")
+
+        self.switch_fatigue = ctk.CTkSwitch(tab, text="İnsan Yorulması (Mola Sistemi) Aktif",
+                                             command=self._on_extras_toggle)
         self.switch_fatigue.pack(pady=5)
         self.switch_fatigue.select()
-        
-        self.switch_trash = ctk.CTkSwitch(tab, text="Otomatik Çöpleri Yere At (Trash Drop)")
+        ctk.CTkLabel(tab, text="  40-75dk çalışma sonrası 4-12dk AFK mola. Gerçek oyuncu gibi\nyorulup ara verir. 7/24 botlanmadığını gösterir.", text_color="#aaaaaa").pack()
+
+        self.switch_trash = ctk.CTkSwitch(tab, text="Otomatik Çöpleri Yere At (Trash Drop)",
+                                           command=self._on_extras_toggle)
         self.switch_trash.pack(pady=5)
         self.switch_trash.select()
+        ctk.CTkLabel(tab, text="  Envanterdeki çöpleri template matching ile tespit eder,\nsürükle-bırak ile yere atar, Enter ile onaylar.", text_color="#aaaaaa").pack()
+
+        f_drop = ctk.CTkFrame(tab)
+        f_drop.pack(fill="x", padx=10, pady=2)
+        ctk.CTkLabel(f_drop, text="Atma Hedef X:").pack(side="left", padx=5)
+        self.entry_drop_x = ctk.CTkEntry(f_drop, width=50)
+        self.entry_drop_x.insert(0, "400")
+        self.entry_drop_x.pack(side="left", padx=5)
+        ctk.CTkLabel(f_drop, text="Y:").pack(side="left", padx=5)
+        self.entry_drop_y = ctk.CTkEntry(f_drop, width=50)
+        self.entry_drop_y.insert(0, "300")
+        self.entry_drop_y.pack(side="left", padx=5)
+        ctk.CTkLabel(f_drop, text="oyun dünyası koordinatı", text_color="gray").pack(side="left", padx=5)
+
+        self.switch_open_fish = ctk.CTkSwitch(tab, text="Otomatik Balıkları Aç",
+                                               command=self._on_extras_toggle)
+        self.switch_open_fish.pack(pady=5)
+        self.switch_open_fish.select()
+        ctk.CTkLabel(tab, text="  Envanterdeki balıkları template matching ile tespit eder,\nsağ tık ile açar.", text_color="#aaaaaa").pack()
+
+        # ── Anti-Cheat Koruma ──
+        ctk.CTkLabel(tab, text="Anti-Cheat Koruma", font=ctk.CTkFont(weight="bold")).pack(pady=(15, 5))
+
+        self.switch_micro = ctk.CTkSwitch(tab, text="🔴 Mikro Mouse Hareketi", command=self._on_extras_toggle)
+        self.switch_micro.pack(pady=2)
+        self.switch_micro.select()
+        ctk.CTkLabel(tab, text="  Işınlanma yerine 3 adımlı hareket. EN KRİTİK koruma.", text_color="#ff6666").pack()
+
+        self.switch_dynrhythm = ctk.CTkSwitch(tab, text="🔴 Dinamik Ritim", command=self._on_extras_toggle)
+        self.switch_dynrhythm.pack(pady=2)
+        self.switch_dynrhythm.select()
+        ctk.CTkLabel(tab, text="  Sabit pattern yerine Gauss gürültülü prosedürel ritim. Tespit riski çok yüksek.", text_color="#ff6666").pack()
+
+        self.switch_gauss = ctk.CTkSwitch(tab, text="🟡 Gaussian Jitter", command=self._on_extras_toggle)
+        self.switch_gauss.pack(pady=2)
+        self.switch_gauss.select()
+        ctk.CTkLabel(tab, text="  Uniform yerine normal dağılımlı tıklama sapması. Önerilir.", text_color="#ffaa33").pack()
+
+        self.switch_fpsjitter = ctk.CTkSwitch(tab, text="🟢 FPS Jitter", command=self._on_extras_toggle)
+        self.switch_fpsjitter.pack(pady=2)
+        self.switch_fpsjitter.select()
+        ctk.CTkLabel(tab, text="  Frame'leri %3 rastgele geciktirir. Düşük öncelikli ama faydalı.", text_color="#66ff66").pack()
 
     # ── Metodlar ──
     
@@ -440,6 +539,24 @@ class FishingBotGUI(ctk.CTk):
         # Config'e anında yaz — bot çalışırken değişiklikler hemen etki eder
         self._apply_sliders_to_config()
 
+    def _on_extras_toggle(self):
+        """TÜM Zırh & Ekstralar toggle'larını CANLI olarak config'e yazar ve kaydeder."""
+        c = self.config
+        c.autobot.use_armor_trick = self.switch_armor.get() == 1
+        c.autobot.use_fatigue_system = self.switch_fatigue.get() == 1
+        c.autobot.auto_drop_trash = self.switch_trash.get() == 1
+        c.autobot.auto_open_fishes = self.switch_open_fish.get() == 1
+        c.human.use_gaussian_jitter = self.switch_gauss.get() == 1
+        c.human.use_micro_movement = self.switch_micro.get() == 1
+        c.human.use_dynamic_rhythm = self.switch_dynrhythm.get() == 1
+        c.human.use_fps_jitter = self.switch_fpsjitter.get() == 1
+        try:
+            c.autobot.trash_drop_x = int(self.entry_drop_x.get())
+            c.autobot.trash_drop_y = int(self.entry_drop_y.get())
+        except ValueError:
+            pass
+        c.save_calibration()
+
     def _apply_sliders_to_config(self):
         """Tüm slider değerlerini config nesnesine yazar ve OTOMATİK KAYDEDER."""
         reaction_ms = int(self.slider_reaction.get())
@@ -447,19 +564,16 @@ class FishingBotGUI(ctk.CTk):
         self.config.human.reaction_max = (reaction_ms + 50) / 1000.0
         self.config.human.click_cooldown = self.slider_cooldown.get() / 1000.0
         self.config.autobot.max_clicks_per_minigame = int(self.slider_maxclicks.get())
+        self.config.autobot.delay_after_bait = round(self.slider_baitdelay.get(), 1)
+        self.config.autobot.retry_cast_timeout = int(self.slider_retry.get())
         self.config.fish.fish_body_offset_y = self.slider_body_offset.get() / 100.0
         self.config.human.horizontal_jitter_px = int(self.slider_hjitter.get())
         self.config.human.prediction_lead_factor = round(self.slider_lead.get(), 2)
         self.config.human.prediction_max_lead_px = int(self.slider_maxlead.get())
         self.config.human.prediction_speed_threshold = float(self.slider_predth.get())
         self.config.human.click_inner_margin = self.slider_margin.get() / 100.0
-        # Anti-cheat toggle'lar
-        self.config.human.use_gaussian_jitter = self.switch_gauss.get() == 1
-        self.config.human.use_micro_movement = self.switch_micro.get() == 1
-        self.config.human.use_dynamic_rhythm = self.switch_dynrhythm.get() == 1
-        self.config.human.use_fps_jitter = self.switch_fpsjitter.get() == 1
-        # Her değişiklikte otomatik kaydet
-        self.config.save_calibration()
+        # Tüm toggle'ları da uygula (güvenlik: bot başlarken)
+        self._on_extras_toggle()
         
     def update_status(self, status: str, catches: int, casts: int):
         # Arayüz güncellemeleri ana thread'de yapılmalı
@@ -483,10 +597,13 @@ class FishingBotGUI(ctk.CTk):
             self.config.debug_mode = self.switch_debug.get() == 1
             self.config.autobot.key_bait = self.entry_bait.get()
             self.config.autobot.key_fish = self.entry_fish.get()
-            self.config.autobot.use_armor_trick = self.switch_armor.get() == 1
-            self.config.autobot.use_fatigue_system = self.switch_fatigue.get() == 1
-            self.config.autobot.auto_drop_trash = self.switch_trash.get() == 1
-            self._apply_sliders_to_config()  # İnce ayarları uygula
+            try:
+                self.config.autobot.trash_drop_x = int(self.entry_drop_x.get())
+                self.config.autobot.trash_drop_y = int(self.entry_drop_y.get())
+            except ValueError:
+                pass
+            self._on_extras_toggle()  # Tüm toggle'ları config'e yaz
+            self._apply_sliders_to_config()  # İnce ayar slider'larını uygula
 
             # Başlat
             self.btn_start.configure(text="⏹ Durdur", fg_color="red", hover_color="darkred")

@@ -68,6 +68,8 @@ class BotLogic:
         # WAITING: state geçiş tereddütü
         self._hesitation_start: float = 0.0
         self._hesitation_duration: float = 0.0
+        # Watchdog: minigame bitişini takip et
+        self._last_minigame_end_time: float = 0.0
         # MINIGAME: İnsansı reaksiyon gecikmesi sistemi
         self._reaction_delay: float = 0.0       # Bu tıklama için random reaksiyon süresi
         self._fish_entered_safe_at: float = 0.0  # Balık safe zone'a ilk girdiği an
@@ -106,6 +108,16 @@ class BotLogic:
         clicked = False
         status_msg = ""
 
+        # ── WATCHDOG: Minigame sonrası 10sn içinde yeni minigame başlamazsa ──
+        # CAST state'ine zorla (space'e tekrar bas)
+        if (self.state not in (BotState.IDLE, BotState.MINIGAME, BotState.FATIGUE_BREAK)
+                and self._last_minigame_end_time > 0
+                and now - self._last_minigame_end_time > self._cfg.retry_cast_timeout):
+            status_msg = f"Watchdog: {int(now - self._last_minigame_end_time)}s oldu, tekrar olta atiliyor..."
+            self._last_minigame_end_time = 0.0  # Tek seferlik tetikle
+            self._transition_to(BotState.CAST)
+            return False, status_msg
+
         if self.state == BotState.IDLE:
             status_msg = "Bot Durduruldu"
 
@@ -130,36 +142,15 @@ class BotLogic:
                     self._clicker.press_key(self._cfg.key_bait)
                     status_msg = "Hazirlik: Normal Yem takildi"
 
-                # 1 saniye bekle (±random) — yem takıldıktan sonra olta atmak için
-                self._block_until = now + self._randomize_delay(1.05)
+                # Yem sonrası bekleme — olta atmak için (config'den ayarlanabilir)
+                self._block_until = now + self._randomize_delay(self._cfg.delay_after_bait)
 
             # Yem takma sonrası bekleme süresi doldu mu?
             if now < self._block_until:
                 status_msg = f"Hazirlik: Bekleniyor... ({self._block_until - now:.1f}s)"
                 return False, status_msg
 
-            # 2. Zırh değiştir (opsiyonel trick - Animasyon İptali)
-            if self._cfg.use_armor_trick and self._cfg.armor_x > 0 and self._cfg.armor_y > 0:
-                # Zırh trick'i sadece bir kez yap
-                if not getattr(self, "_armor_trick_done", False):
-                    self._armor_trick_done = True
-                    self._clicker.right_click_at(self._cfg.armor_x, self._cfg.armor_y)
-                    self._block_until = now + 0.15
-                    status_msg = "Hazirlik: Zirh cikariliyor..."
-                    return False, status_msg
-                elif now < self._block_until:
-                    status_msg = "Hazirlik: Zirh takiliyor..."
-                    return False, status_msg
-                elif not getattr(self, "_armor_trick_phase2", False):
-                    self._armor_trick_phase2 = True
-                    self._clicker.right_click_at(self._cfg.armor_x, self._cfg.armor_y)
-                    self._block_until = now + self._randomize_delay(self._cfg.delay_after_armor)
-                    status_msg = "Hazirlik: Zirh geri takildi"
-                    return False, status_msg
-                elif now < self._block_until:
-                    status_msg = f"Hazirlik: Zirh bekleniyor... ({self._block_until - now:.1f}s)"
-                    return False, status_msg
-
+            # Zırh trick POST_CATCH'e taşındı — minigame biter bitmez yapılıyor
             self._transition_to(BotState.CAST)
             if not status_msg:
                 status_msg = "Hazirlik: Yem takildi"
@@ -433,52 +424,77 @@ class BotLogic:
             
             if not getattr(self, "_postcatch_action_done", False):
                 self._postcatch_action_done = True
-                
-                full_frame = None
-                
-                # Çöpleri Yere At
-                if self._cfg.auto_drop_trash and self._capture is not None and detector is not None:
-                    if full_frame is None:
-                        full_frame = self._capture.grab_full_frame()
-                        
-                    trashes = detector.detect_inventory_items(full_frame, item_type="trash")
-                    if trashes:
-                        status_msg = f"Envanterdeki {len(trashes)} cop atiliyor..."
-                        for tx, ty in trashes:
-                            # Sürükle bırak (hedef x=50, y=50 oyunun köşesi veya dışı)
-                            self._clicker.drag_and_drop(tx, ty, 50, 50)
-                            # 'Yere at' onay diyalogu için Enter bas.
-                            self._clicker.press_key('enter')
-                            time.sleep(random.uniform(0.35, 0.55))
-                
-                # Balıkları aç
-                if self._cfg.auto_open_fishes and self._capture is not None and detector is not None:
-                    if full_frame is None:
-                        full_frame = self._capture.grab_full_frame()
-                        
-                    fishes = detector.detect_inventory_items(full_frame, item_type="fish")
-                    if fishes:
-                        status_msg = f"Envanterde {len(fishes)} balik aciliyor..."
-                        for fx, fy in fishes:
-                            self._clicker.right_click_at(fx, fy)
-                            time.sleep(random.uniform(0.08, 0.15))
+                self._armor_trick_used = False
 
-            # Animasyon beklemesi (rastgeleleştirilmiş)
-            _postcatch_delay = getattr(self, "_postcatch_target_delay", 0.0)
-            if _postcatch_delay == 0.0:
-                self._postcatch_target_delay = self._randomize_delay(self._cfg.delay_after_catch)
-                _postcatch_delay = self._postcatch_target_delay
-            if elapsed > _postcatch_delay:
-                # Yorulma (Fatigue) kontrolü
-                if self._cfg.use_fatigue_system and time.time() > self._next_fatigue_time:
-                    self._fatigue_duration = random.uniform(
-                        self._cfg.fatigue_duration_min, 
-                        self._cfg.fatigue_duration_max
-                    )
-                    self._transition_to(BotState.FATIGUE_BREAK)
-                else:
-                    # Başa dön
-                    self._transition_to(BotState.PREPARE)
+                # ── ZIRH TRICK: Minigame bittiği ANDA zırh çıkar-tak ──
+                if self._cfg.use_armor_trick and self._cfg.armor_x > 0 and self._cfg.armor_y > 0:
+                    self._clicker.right_click_at(self._cfg.armor_x, self._cfg.armor_y)
+                    time.sleep(0.06)
+                    self._clicker.right_click_at(self._cfg.armor_x, self._cfg.armor_y)
+                    status_msg = "Zirh trick: Animasyon iptal edildi"
+                    self._armor_trick_used = True
+
+                full_frame = None
+
+                # Envanter işlemleri (sadece zırh trick KAPALIYSA yap)
+                if not self._armor_trick_used:
+                    # Çöpleri Yere At
+                    if self._cfg.auto_drop_trash and self._capture is not None and detector is not None:
+                        if full_frame is None:
+                            full_frame = self._capture.grab_full_frame()
+
+                        trashes = detector.detect_inventory_items(full_frame, item_type="trash", threshold=0.60)
+                        if trashes:
+                            status_msg = f"Envanterde {len(trashes)} cop bulundu, atiliyor..."
+                            drop_x = self._cfg.trash_drop_x
+                            drop_y = self._cfg.trash_drop_y
+                            for tx, ty in trashes:
+                                self._clicker.drag_and_drop(tx, ty, drop_x, drop_y)
+                                # "Evet" butonunu bul ve tıkla (Enter yerine)
+                                time.sleep(0.3)  # Dialog'un açılmasını bekle
+                                confirm_frame = self._capture.grab_full_frame()
+                                yes_btn = detector.detect_yes_button(confirm_frame, threshold=0.60)
+                                if yes_btn:
+                                    self._clicker.left_click_screen(yes_btn[0], yes_btn[1])
+                                    status_msg = f"Cop atildi (Yes butonuna tiklandi)"
+                                else:
+                                    # Fallback: Enter dene
+                                    self._clicker.press_key('enter')
+                                    status_msg = f"Cop atildi (Enter ile onaylandi)"
+                                time.sleep(random.uniform(0.35, 0.55))
+                        else:
+                            status_msg = "Cop bulunamadi (template eslesmedi)"
+
+                    # Balıkları aç
+                    if self._cfg.auto_open_fishes and self._capture is not None and detector is not None:
+                        if full_frame is None:
+                            full_frame = self._capture.grab_full_frame()
+
+                        fishes = detector.detect_inventory_items(full_frame, item_type="fish", threshold=0.60)
+                        if fishes:
+                            status_msg = f"Envanterde {len(fishes)} balik bulundu, aciliyor..."
+                            for fx, fy in fishes:
+                                self._clicker.right_click_at(fx, fy)
+                                time.sleep(random.uniform(0.08, 0.15))
+
+            # ── Zırh trick kullanıldıysa HEMEN PREPARE'e geç (bekleme YOK) ──
+            if getattr(self, "_armor_trick_used", False):
+                self._transition_to(BotState.PREPARE)
+            else:
+                # Animasyon beklemesi (rastgeleleştirilmiş) — normal akış
+                _postcatch_delay = getattr(self, "_postcatch_target_delay", 0.0)
+                if _postcatch_delay == 0.0:
+                    self._postcatch_target_delay = self._randomize_delay(self._cfg.delay_after_catch)
+                    _postcatch_delay = self._postcatch_target_delay
+                if elapsed > _postcatch_delay:
+                    if self._cfg.use_fatigue_system and time.time() > self._next_fatigue_time:
+                        self._fatigue_duration = random.uniform(
+                            self._cfg.fatigue_duration_min,
+                            self._cfg.fatigue_duration_max
+                        )
+                        self._transition_to(BotState.FATIGUE_BREAK)
+                    else:
+                        self._transition_to(BotState.PREPARE)
                     
         elif self.state == BotState.FATIGUE_BREAK:
             remaining = self._fatigue_duration - elapsed
@@ -504,6 +520,7 @@ class BotLogic:
         self._state_start_time = time.time()
 
         if new_state == BotState.MINIGAME:
+            self._last_minigame_end_time = 0.0  # Watchdog sıfırla
             self._click_count_in_minigame = 0
             self._fish_clicked_this_pass = False
             self._fish_pos_history.clear()  # Yeni minigame → temiz pozisyon geçmişi
@@ -540,11 +557,10 @@ class BotLogic:
             self._catch_streak += 1
         elif new_state == BotState.PREPARE:
             self._prepare_action_done = False
-            self._armor_trick_done = False
-            self._armor_trick_phase2 = False
         elif new_state == BotState.POST_CATCH:
             self._postcatch_action_done = False
             self._postcatch_target_delay = 0.0  # Her seferinde yeni rastgele değer
+            self._last_minigame_end_time = time.time()  # Watchdog için
         elif new_state == BotState.CAST:
             self._cast_done = False
             self._cast_pressed = False

@@ -97,22 +97,34 @@ class FishDetectConfig:
 @dataclass
 class HumanConfig:
     """İnsan benzeri davranış parametreleri."""
-    # Reaksiyon süresi aralığı (saniye).
-    # 80-150ms: hızlı ama insansı. Profesyonel oyuncu seviyesi.
-    reaction_min: float = 0.08     # 80ms
-    reaction_max: float = 0.15     # 150ms
+    # ── İnsansı Reaksiyon Sistemi (Anti-Cheat) ──
+    # Gerçek insan visual-motor reaksiyon süresi: 150-250ms
+    # Profesyonel oyuncu seviyesi: 100-180ms
+    # Bot, balık safe zone'a girdikten SONRA bu kadar bekler.
+    # Bu, anti-cheat için EN KRİTİK parametredir.
+    reaction_min: float = 0.10     # 100ms — çok hızlı refleks (profesyonel oyuncu alt sınırı)
+    reaction_max: float = 0.18     # 180ms — normal refleks (yorgun/anlık dalgınlık)
 
     # Tıklama noktasında rastgele sapma (piksel).
-    # ±5px sapma ile her seferinde tam merkeze tıklanmaz.
-    aim_offset_px: int = 2       # ±2px sapma (5px miss yapıyordu)
+    # ±2px sapma ile her seferinde tam merkeze tıklanmaz.
+    aim_offset_px: int = 3       # ±3px sapma (insansı mikro hata)
 
-    # Mouse hareket süresi aralığı (saniye).
+    # Mouse hareket süresi aralığı (saniye) — sadece envanter/zırh için.
     mouse_speed_min: float = 0.02  # 20ms
     mouse_speed_max: float = 0.05  # 50ms
 
     # Tıklamalar arası minimum bekleme (saniye).
-    # 0.30s = saniyede ~3.3 tıklama. Hızlı nadir balıkları yakalamak için optimize.
-    click_cooldown: float = 0.50  # Tıklamalar arası ~0.5sn (15sn'de ~8 tık = doğal ritim)
+    # 0.35s = saniyede ~2.8 tıklama. Hızlı nadir balıkları yakalamak için optimize.
+    # İnsan seri tıklama hızı: 150-250ms aralığı. 350ms güvenli üst sınır.
+    click_cooldown: float = 0.35
+
+    # ── Prediction (Hedef Öngörü) Parametreleri ──
+    # İnsanlar balığın gideceği yeri doğal olarak tahmin eder (lead targeting).
+    # Bu parametreler botun tahmin gücünü kontrol eder.
+    prediction_look_ahead_base: float = 0.10   # Temel ileriye bakma süresi (100ms)
+    prediction_look_ahead_max: float = 0.18    # Maksimum ileriye bakma (hızlı balıklar için)
+    prediction_speed_threshold: float = 50.0   # px/s: bu hızın üstünde prediction aktif
+    prediction_max_lead_px: int = 35           # Maksimum lead mesafesi (piksel)
 
 
 @dataclass

@@ -66,6 +66,10 @@ class BotLogic:
         self._catch_streak: int = 0
         # WAITING: idle mouse hareket zamanlayıcısı
         self._last_idle_move: float = 0.0
+        # MINIGAME: İnsansı reaksiyon gecikmesi sistemi
+        self._reaction_delay: float = 0.0       # Bu tıklama için random reaksiyon süresi
+        self._fish_entered_safe_at: float = 0.0  # Balık safe zone'a ilk girdiği an
+        self._fish_was_inside: bool = False      # Önceki frame'de balık içerde miydi?
 
     def start(self) -> None:
         """Döngüyü başlatır."""
@@ -241,7 +245,7 @@ class BotLogic:
                 if self._click_count_in_minigame >= 8:
                     status_msg = f"MINIGAME: {self._click_count_in_minigame} tik tamam, circle kapaniyor..."
                     return False, status_msg
-                # Balık içerdeyse ve cooldown bittiyse tıkla
+                # Balık içerdeyse işle
                 if detection.is_fish_inside and detection.fish is not None:
 
                     # ── ADAPTİF HIZ VE TAHMİN (PREDICTION) ALGORİTMASI ──
@@ -252,17 +256,10 @@ class BotLogic:
                     # Pozisyon geçmişine ekle (son 5 frame)
                     self._fish_pos_history.append((current_x, current_y, now))
 
-                    # Safe zone kontrolü — balık hızına göre DİNAMİK
-                    dist_to_center = math.hypot(
-                        current_x - detection.circle.center_x,
-                        current_y - detection.circle.center_y
-                    )
-
                     # Hız hesapla (son 5 frame moving average)
                     speed = 0.0
                     vx, vy = 0.0, 0.0
                     if len(self._fish_pos_history) >= 2:
-                        # Son 5 frame'den ortalama velocity
                         velocities = []
                         history_list = list(self._fish_pos_history)
                         for i in range(1, len(history_list)):
@@ -279,41 +276,113 @@ class BotLogic:
                             speed = math.hypot(vx, vy)
 
                     # Hıza göre DİNAMİK safe_radius
-                    if speed > 200:       # Nadir/çok hızlı balık
-                        safe_radius = detection.circle.radius * 0.72
-                    elif speed > 100:     # Hızlı balık
-                        safe_radius = detection.circle.radius * 0.78
-                    else:                 # Normal balık
-                        safe_radius = detection.circle.radius * 0.85
+                    base_radius = detection.circle.radius
+                    if speed > 250:       # Efsanevi/ultra hızlı balık
+                        safe_radius = base_radius * 0.65
+                    elif speed > 150:     # Nadir/çok hızlı balık
+                        safe_radius = base_radius * 0.72
+                    elif speed > 80:      # Orta-hızlı balık
+                        safe_radius = base_radius * 0.78
+                    else:                 # Normal/yavaş balık
+                        safe_radius = base_radius * 0.85
+
+                    dist_to_center = math.hypot(
+                        current_x - detection.circle.center_x,
+                        current_y - detection.circle.center_y
+                    )
 
                     if dist_to_center > safe_radius:
+                        # Balık safe zone dışında → reaksiyon sıfırla
+                        self._fish_was_inside = False
+                        self._fish_entered_safe_at = 0.0
+                        self._reaction_delay = 0.0
                         return False, status_msg
 
+                    # ── İNSANSI REAKSİYON GECİKMESİ SİSTEMİ (ANTI-CHEAT) ──
+                    # Balık safe zone'a İLK girdiğinde zamanı kaydet.
+                    # Her tıklama için yeni bir reaksiyon süresi belirle.
+                    if not self._fish_was_inside:
+                        self._fish_was_inside = True
+                        self._fish_entered_safe_at = now
+                        self._reaction_delay = random.uniform(
+                            self._clicker._human.reaction_min,
+                            self._clicker._human.reaction_max
+                        )
+
+                    # Reaksiyon süresi dolmadıysa tıklama YAPMA
+                    reaction_elapsed = now - self._fish_entered_safe_at
+                    if reaction_elapsed < self._reaction_delay:
+                        status_msg = (
+                            f"MINIGAME: {self._click_count_in_minigame}/3 Tik "
+                            f"(reaksiyon: {reaction_elapsed*1000:.0f}/{self._reaction_delay*1000:.0f}ms)"
+                        )
+                        return False, status_msg
+
+                    # ── PREDICTION: TÜM BALIKLARA UYGULA (hız > eşik ise) ──
                     target_x = current_x
                     target_y = current_y
 
-                    # SADECE hızlı balıklara prediction uygula (miss'i azaltmak için)
-                    if speed > 100:
-                        look_ahead_time = 0.05
-                        target_x = int(current_x + vx * look_ahead_time)
-                        target_y = int(current_y + vy * look_ahead_time)
+                    pred_threshold = self._clicker._human.prediction_speed_threshold
+                    if speed > pred_threshold:
+                        # Dinamik look_ahead: hıza göre ölçeklenir
+                        # Hızlı balık = daha fazla lead (insan da öyle yapar)
+                        speed_factor = min(1.0, speed / 300.0)  # 0-1 arası normalleştir
+                        look_ahead = self._clicker._human.prediction_look_ahead_base + \
+                                     speed_factor * (self._clicker._human.prediction_look_ahead_max -
+                                                     self._clicker._human.prediction_look_ahead_base)
+
+                        # Velocity bazlı pozisyon tahmini
+                        target_x = int(current_x + vx * look_ahead)
+                        target_y = int(current_y + vy * look_ahead)
+
+                        # Ek lead: balık yönüne doğru ekstra offset
                         if speed > 0:
-                            lead_px = int(min(15, speed * 0.06))
+                            lead_px = min(
+                                self._clicker._human.prediction_max_lead_px,
+                                int(speed * look_ahead * 0.7)
+                            )
                             target_x = int(target_x + (vx / speed) * lead_px)
                             target_y = int(target_y + (vy / speed) * lead_px)
-                    # Yavaş/orta balık → direkt pozisyona tıkla, prediction yapma
 
+                    # ── ÇEMBER SINIRI KORUMASI ──
+                    # Prediction hedefi çember dışına taşıyabilir.
+                    # Tıklama HER ZAMAN çemberin İÇİNDE kalmalı.
+                    circle_cx = detection.circle.center_x
+                    circle_cy = detection.circle.center_y
+                    target_dist = math.hypot(target_x - circle_cx, target_y - circle_cy)
+
+                    # Maksimum izin verilen mesafe: çember yarıçapının %90'ı
+                    # (inner_margin 0.95 ile tutarlı, ama tıklama için biraz daha güvenli)
+                    max_click_radius = int(detection.circle.radius * 0.90)
+
+                    if target_dist > max_click_radius and target_dist > 0:
+                        # Hedefi çember sınırına geri çek (yönde clamp)
+                        scale = max_click_radius / target_dist
+                        target_x = int(circle_cx + (target_x - circle_cx) * scale)
+                        target_y = int(circle_cy + (target_y - circle_cy) * scale)
+
+                    # ── TIKLAMA KARARI ──
                     if self._clicker.is_ready:
-                        # ── Bilerek Iskalama: 3. tıklamayı yapma (~%12 ihtimal) ──
+                        # ── Bilerek Iskalama (~%12 ihtimal) ──
                         if self._intentional_miss and self._click_count_in_minigame >= 2:
                             self._intentional_miss = False
                             self._clicker._last_click_time = time.time()
+                            # Reaksiyonu sıfırla — yeni tık için yeniden bekle
+                            self._fish_was_inside = False
+                            self._fish_entered_safe_at = 0.0
+                            self._reaction_delay = 0.0
                             return False, status_msg
 
-                        # Tahmin edilen noktaya tıkla
-                        if self._clicker.click_at(target_x, target_y):
+                        # Tahmin edilen noktaya HIZLI tıkla (bezier'siz, insansı)
+                        if self._clicker.fast_click_at(target_x, target_y):
                             clicked = True
                             self._click_count_in_minigame += 1
+
+                            # ── Tıklama sonrası: reaksiyonu sıfırla ──
+                            # Her tıklama yeni bir "görsel karar" gerektirir
+                            self._fish_was_inside = False
+                            self._fish_entered_safe_at = 0.0
+                            self._reaction_delay = 0.0
 
                             # ── İnsansı Ritim: tıklamadan SONRA cooldown'u ayarla ──
                             if self._click_rhythm and self._click_rhythm_idx < len(self._click_rhythm):
@@ -391,6 +460,10 @@ class BotLogic:
             self._fish_clicked_this_pass = False
             self._fish_pos_history.clear()  # Yeni minigame → temiz pozisyon geçmişi
             self._circle_missing_count = 0  # Circle dalgalanma sayacı
+            # Reaksiyon gecikmesi sıfırla
+            self._reaction_delay = 0.0
+            self._fish_entered_safe_at = 0.0
+            self._fish_was_inside = False
 
             # ── Rastgele Tıklama Ritim Pattern'i ──
             # Her minigame'de farklı ritim (insansı çeşitlilik)

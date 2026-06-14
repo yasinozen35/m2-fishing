@@ -660,12 +660,23 @@ class FishingBotGUI(ctk.CTk):
         # Ağırlıklara göre mod seçimi
         modes = ["Terminatör", "E-Sporcu", "Güvenli"]
         weights = [c.autobot.auto_weight_terminator, c.autobot.auto_weight_esports, c.autobot.auto_weight_safe]
+        
+        # Aynı modun üst üste seçilmesini engelle ki kullanıcı değişimi fark etsin
+        last_mode = getattr(self, "_last_auto_mode", None)
+        if last_mode in modes:
+            idx = modes.index(last_mode)
+            weights[idx] = 0
+            
         if sum(weights) <= 0:
             weights = [10, 40, 50]
+            if last_mode in modes:
+                weights[modes.index(last_mode)] = 0
             
         chosen = random.choices(modes, weights=weights)[0]
+        self._last_auto_mode = chosen
         
         # Seçili moda geç
+        self.log(f"[Auto Mod] Profil arka planda degisti: {chosen}")
         self._apply_preset(chosen, is_auto=True)
         
         # Sonraki çalışma zamanını hesapla

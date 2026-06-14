@@ -1,0 +1,24 @@
+{
+  "_meta": {
+    "process": "metin2client.exe",
+    "base_address": "0x00400000",
+    "note": "Bu dosya find_offsets.py tarafından OTOMATİK doldurulur. Manuel düzenlemeyin.",
+    "format": {
+      "direkt": "0x00ABCDEF → direkt bellek adresi",
+      "base_offset": "base+0xABCD → base_address + 0xABCD",
+      "pointer_chain": "chain:base+0x100;0x4;0x8 → pointer chain takip et"
+    }
+  },
+  "offsets": {
+    "circle_x": "0x00000000",
+    "circle_y": "0x00000000",
+    "circle_radius": "0x00000000",
+    "circle_visible": "0x00000000",
+    "fish_x": "0x00000000",
+    "fish_y": "0x00000000",
+    "fish_speed_x": "0x00000000",
+    "fish_speed_y": "0x00000000",
+    "click_count": "0x00000000",
+    "game_mode": "0x00000000"
+  }
+}

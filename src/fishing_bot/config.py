@@ -163,6 +163,9 @@ class HumanConfig:
     # FPS jitter: frame'leri rastgele geciktir
     use_fps_jitter: bool = True
     fps_jitter_rate: float = 0.03              # %3 frame'de gecikme
+    
+    # ── Hedefleme Modu (Senkronizasyon) ──
+    targeting_mode: str = "organic"            # "organic" veya "terminator"
 
 
 @dataclass
@@ -177,6 +180,14 @@ class AutoBotConfig:
     armor_y: int = 0
     use_armor_trick: bool = False # Zırh çıkar-tak aktif mi?
     auto_open_fishes: bool = True # Yakalanan balıklar otomatik açılsın mı?
+    
+    # ── Auto Mod Ayarları ──
+    auto_mode_min_mins: int = 3
+    auto_mode_max_mins: int = 8
+    auto_weight_terminator: int = 10
+    auto_weight_esports: int = 50
+    auto_weight_safe: int = 40
+
     auto_drop_trash: bool = True  # Çöpler yere atılsın mı?
 
     # İnsan Yorulması (Fatigue System)
@@ -239,8 +250,14 @@ class Config:
             # Zırh
             "armor_x": self.autobot.armor_x,
             "armor_y": self.autobot.armor_y,
-            "use_armor_trick": self.autobot.use_armor_trick,
+            "trash_drop_y": self.autobot.trash_drop_y,
             "auto_open_fishes": self.autobot.auto_open_fishes,
+            "auto_mode_min_mins": self.autobot.auto_mode_min_mins,
+            "auto_mode_max_mins": self.autobot.auto_mode_max_mins,
+            "auto_weight_terminator": self.autobot.auto_weight_terminator,
+            "auto_weight_esports": self.autobot.auto_weight_esports,
+            "auto_weight_safe": self.autobot.auto_weight_safe,
+            "use_armor_trick": self.autobot.use_armor_trick,
             "auto_drop_trash": self.autobot.auto_drop_trash,
             "use_fatigue_system": self.autobot.use_fatigue_system,
             # Human — reaksiyon & tıklama
@@ -269,6 +286,7 @@ class Config:
             "fast_fish_miss_rate": self.human.fast_fish_miss_rate,
             "use_fps_jitter": self.human.use_fps_jitter,
             "fps_jitter_rate": self.human.fps_jitter_rate,
+            "targeting_mode": self.human.targeting_mode,
             # Fish
             "fish_body_offset_y": self.fish.fish_body_offset_y,
             # AutoBot
@@ -277,7 +295,6 @@ class Config:
             "delay_after_bait": self.autobot.delay_after_bait,
             "retry_cast_timeout": self.autobot.retry_cast_timeout,
             "trash_drop_x": self.autobot.trash_drop_x,
-            "trash_drop_y": self.autobot.trash_drop_y,
         }
         try:
             with open(filepath, "w", encoding="utf-8") as f:
@@ -300,9 +317,15 @@ class Config:
                     self.capture.height = data.get("capture_height", self.capture.height)
                     # Zırh
                     self.autobot.armor_x = data.get("armor_x", self.autobot.armor_x)
-                    self.autobot.armor_y = data.get("armor_y", self.autobot.armor_y)
-                    self.autobot.use_armor_trick = data.get("use_armor_trick", self.autobot.use_armor_trick)
+                    self.autobot.trash_drop_x = data.get("trash_drop_x", self.autobot.trash_drop_x)
+                    self.autobot.trash_drop_y = data.get("trash_drop_y", self.autobot.trash_drop_y)
                     self.autobot.auto_open_fishes = data.get("auto_open_fishes", self.autobot.auto_open_fishes)
+                    self.autobot.auto_mode_min_mins = data.get("auto_mode_min_mins", self.autobot.auto_mode_min_mins)
+                    self.autobot.auto_mode_max_mins = data.get("auto_mode_max_mins", self.autobot.auto_mode_max_mins)
+                    self.autobot.auto_weight_terminator = data.get("auto_weight_terminator", self.autobot.auto_weight_terminator)
+                    self.autobot.auto_weight_esports = data.get("auto_weight_esports", self.autobot.auto_weight_esports)
+                    self.autobot.auto_weight_safe = data.get("auto_weight_safe", self.autobot.auto_weight_safe)
+                    self.autobot.use_armor_trick = data.get("use_armor_trick", self.autobot.use_armor_trick)
                     self.autobot.auto_drop_trash = data.get("auto_drop_trash", self.autobot.auto_drop_trash)
                     self.autobot.use_fatigue_system = data.get("use_fatigue_system", self.autobot.use_fatigue_system)
                     # Human — reaksiyon & tıklama
@@ -331,6 +354,7 @@ class Config:
                     self.human.fast_fish_miss_rate = data.get("fast_fish_miss_rate", self.human.fast_fish_miss_rate)
                     self.human.use_fps_jitter = data.get("use_fps_jitter", self.human.use_fps_jitter)
                     self.human.fps_jitter_rate = data.get("fps_jitter_rate", self.human.fps_jitter_rate)
+                    self.human.targeting_mode = data.get("targeting_mode", self.human.targeting_mode)
                     # Fish
                     self.fish.fish_body_offset_y = data.get("fish_body_offset_y", self.fish.fish_body_offset_y)
                     # AutoBot

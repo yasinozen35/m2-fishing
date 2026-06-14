@@ -187,7 +187,7 @@ class HumanClicker:
         """
         return self.fast_click_at(local_x, local_y)
 
-    def fast_click_at(self, local_x: int, local_y: int) -> bool:
+    def fast_click_at(self, local_x: int, local_y: int, duration: float = 0.0) -> bool:
         """
         Minigame için optimize EDİLMİŞ insansı tıklama.
 
@@ -234,7 +234,26 @@ class HumanClicker:
             import pyautogui
             import pydirectinput
 
-            if self._human.use_micro_movement:
+            if duration > 0.0:
+                # ── ORGANİK MOD: Hareketi tahmine göre zamana yay ──
+                cur_x, cur_y = pyautogui.position()
+                dist = math.hypot(final_x - cur_x, final_y - cur_y)
+                if dist <= 3:
+                    ctypes.windll.user32.SetCursorPos(int(final_x), int(final_y))
+                else:
+                    # Tıklama gecikmesini (~20ms) düşerek sadece hareket süresini bul
+                    move_duration = max(0.01, duration - 0.02)
+                    step_time = 0.015  # 15ms'de bir güncelle
+                    steps = max(3, int(move_duration / step_time))
+                    sleep_per_step = move_duration / steps
+                    
+                    for i in range(1, steps + 1):
+                        t = i / steps
+                        mx = int(cur_x + (final_x - cur_x) * t)
+                        my = int(cur_y + (final_y - cur_y) * t)
+                        ctypes.windll.user32.SetCursorPos(mx, my)
+                        time.sleep(sleep_per_step)
+            elif self._human.use_micro_movement:
                 cur_x, cur_y = pyautogui.position()
                 dist = math.hypot(final_x - cur_x, final_y - cur_y)
                 if dist > 3:
@@ -257,7 +276,23 @@ class HumanClicker:
             pydirectinput.mouseUp()
         except Exception:
             # Fallback: Win32 API
-            if self._human.use_micro_movement:
+            if duration > 0.0:
+                import pyautogui as _pg
+                cur_x, cur_y = _pg.position()
+                dist = math.hypot(final_x - cur_x, final_y - cur_y)
+                if dist > 3:
+                    move_duration = max(0.01, duration - 0.02)
+                    steps = max(3, int(move_duration / 0.015))
+                    sleep_per_step = move_duration / steps
+                    for i in range(1, steps + 1):
+                        t = i / steps
+                        mx = int(cur_x + (final_x - cur_x) * t)
+                        my = int(cur_y + (final_y - cur_y) * t)
+                        ctypes.windll.user32.SetCursorPos(mx, my)
+                        time.sleep(sleep_per_step)
+                else:
+                    ctypes.windll.user32.SetCursorPos(int(final_x), int(final_y))
+            elif self._human.use_micro_movement:
                 import pyautogui as _pg
                 cur_x, cur_y = _pg.position()
                 dist = math.hypot(final_x - cur_x, final_y - cur_y)

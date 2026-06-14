@@ -336,13 +336,27 @@ class BotLogic:
                     target_y = current_y
 
                     pred_threshold = self._clicker._human.prediction_speed_threshold
+                    move_duration = 0.0
+                    
+                    if self._clicker._human.targeting_mode == "organic":
+                        move_duration = self._clicker._human.prediction_look_ahead_base
+
                     if speed > pred_threshold:
+                        # ── HEDEFLEME MODU SEÇİMİ ──
+                        if self._clicker._human.targeting_mode == "terminator":
+                            look_ahead_base = 0.02
+                            look_ahead_max = 0.04
+                            move_duration = 0.0
+                        else:
+                            look_ahead_base = self._clicker._human.prediction_look_ahead_base
+                            look_ahead_max = self._clicker._human.prediction_look_ahead_max
+
                         # Dinamik look_ahead: hıza göre ölçeklenir
-                        # Hızlı balık = daha fazla lead (insan da öyle yapar)
                         speed_factor = min(1.0, speed / 300.0)  # 0-1 arası normalleştir
-                        look_ahead = self._clicker._human.prediction_look_ahead_base + \
-                                     speed_factor * (self._clicker._human.prediction_look_ahead_max -
-                                                     self._clicker._human.prediction_look_ahead_base)
+                        look_ahead = look_ahead_base + speed_factor * (look_ahead_max - look_ahead_base)
+
+                        if self._clicker._human.targeting_mode == "organic":
+                            move_duration = look_ahead
 
                         # Velocity bazlı pozisyon tahmini
                         target_x = int(current_x + vx * look_ahead)
@@ -404,7 +418,7 @@ class BotLogic:
                             return False, status_msg
 
                         # Tahmin edilen noktaya HIZLI tıkla (bezier'siz, insansı)
-                        if self._clicker.fast_click_at(target_x, target_y):
+                        if self._clicker.fast_click_at(target_x, target_y, duration=move_duration):
                             clicked = True
                             self._click_count_in_minigame += 1
 

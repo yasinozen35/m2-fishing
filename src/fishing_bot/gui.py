@@ -131,9 +131,25 @@ class FishingBotGUI(ctk.CTk):
         self.switch_debug.grid(row=3, column=0, padx=20, pady=10)
         self.switch_debug.deselect() # Varsayılan olarak KAPALI (Focus çalmasını engellemek için)
         
-        # ── Sağ İçerik (Sekmeler) ──
-        self.tabview = ctk.CTkTabview(self, width=500)
-        self.tabview.grid(row=0, column=1, padx=20, pady=20, sticky="nsew")
+        # ── Sağ İçerik Konteyneri ──
+        self.right_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.right_frame.grid(row=0, column=1, sticky="nsew")
+        self.right_frame.grid_columnconfigure(0, weight=1)
+        self.right_frame.grid_rowconfigure(1, weight=1)
+        
+        # Üst Panel - Mod Butonları
+        self.f_modes = ctk.CTkFrame(self.right_frame)
+        self.f_modes.grid(row=0, column=0, padx=20, pady=(20, 0), sticky="ew")
+        
+        self.seg_modes_top = ctk.CTkSegmentedButton(self.f_modes, values=["Terminatör", "E-Sporcu", "Güvenli", "Auto Mod"], command=lambda v: self._apply_preset(v))
+        self.seg_modes_top.pack(fill="x", padx=10, pady=5)
+        self.seg_modes_top.set("Güvenli")
+        
+        self.lbl_auto_status = ctk.CTkLabel(self.f_modes, text="", font=ctk.CTkFont(size=11, slant="italic"), text_color="cyan")
+        self.lbl_auto_status.pack(pady=(0, 5))
+        
+        self.tabview = ctk.CTkTabview(self.right_frame, width=500)
+        self.tabview.grid(row=1, column=0, padx=20, pady=10, sticky="nsew")
         
         self.tabview.add("Ana Ekran")
         self.tabview.add("Ayarlar")
@@ -321,6 +337,42 @@ class FishingBotGUI(ctk.CTk):
         self.slider_margin.configure(command=lambda v: self._on_slider_update(self.lbl_margin, v, 0))
         ctk.CTkLabel(tab, text="  DÜŞÜK = çember merkezine yakın / YÜKSEK = kenara yakın", text_color="gray").pack()
 
+        # 9. Tahmin Gürültüsü
+        f_pnoise = ctk.CTkFrame(tab)
+        f_pnoise.pack(fill="x", padx=10, pady=2)
+        ctk.CTkLabel(f_pnoise, text="Tahmin Gürültüsü:", width=120).pack(side="left", padx=5)
+        self.slider_pnoise = ctk.CTkSlider(f_pnoise, from_=0.0, to=0.50, number_of_steps=50, width=200)
+        self.slider_pnoise.pack(side="left", padx=5)
+        self.slider_pnoise.set(0.15)
+        self.lbl_pnoise = ctk.CTkLabel(f_pnoise, text="0.15", width=40)
+        self.lbl_pnoise.pack(side="left", padx=5)
+        self.slider_pnoise.configure(command=lambda v: self._on_slider_update(self.lbl_pnoise, v, 2))
+        ctk.CTkLabel(tab, text="  0 = Mükemmel nokta atışı / YÜKSEK = İnsani yanılma payı", text_color="gray").pack()
+
+        # ── Auto Mod Süre ve Ağırlık Ayarları ──
+        ctk.CTkLabel(tab, text="Auto Mod Konfigürasyonu", font=ctk.CTkFont(weight="bold")).pack(pady=(15, 5))
+        
+        f_auto1 = ctk.CTkFrame(tab)
+        f_auto1.pack(fill="x", padx=10, pady=2)
+        ctk.CTkLabel(f_auto1, text="Süre (Dk) Min:").pack(side="left", padx=5)
+        self.entry_amin = ctk.CTkEntry(f_auto1, width=40)
+        self.entry_amin.pack(side="left", padx=5)
+        ctk.CTkLabel(f_auto1, text="Max:").pack(side="left", padx=5)
+        self.entry_amax = ctk.CTkEntry(f_auto1, width=40)
+        self.entry_amax.pack(side="left", padx=5)
+        
+        f_auto2 = ctk.CTkFrame(tab)
+        f_auto2.pack(fill="x", padx=10, pady=2)
+        ctk.CTkLabel(f_auto2, text="Kullanım (%) Terminatör:").pack(side="left", padx=5)
+        self.entry_aterm = ctk.CTkEntry(f_auto2, width=35)
+        self.entry_aterm.pack(side="left", padx=2)
+        ctk.CTkLabel(f_auto2, text="E-Sporcu:").pack(side="left", padx=5)
+        self.entry_aespo = ctk.CTkEntry(f_auto2, width=35)
+        self.entry_aespo.pack(side="left", padx=2)
+        ctk.CTkLabel(f_auto2, text="Güvenli:").pack(side="left", padx=5)
+        self.entry_asafe = ctk.CTkEntry(f_auto2, width=35)
+        self.entry_asafe.pack(side="left", padx=2)
+
         # ── Varsayılan & Kaydet ──
         f_reset = ctk.CTkFrame(tab)
         f_reset.pack(fill="x", padx=10, pady=(10, 5))
@@ -357,8 +409,16 @@ class FishingBotGUI(ctk.CTk):
         self.lbl_predth.configure(text=str(int(h.prediction_speed_threshold)))
         self.slider_margin.set(int(h.click_inner_margin * 100))
         self.lbl_margin.configure(text=str(int(h.click_inner_margin * 100)))
+        self.slider_pnoise.set(h.prediction_noise_sigma)
+        self.lbl_pnoise.configure(text=f"{h.prediction_noise_sigma:.2f}")
+        
+        self.slider_miss.set(int(h.intentional_miss_rate * 100))
+        self.lbl_miss.configure(text=str(int(h.intentional_miss_rate * 100)))
+        self.slider_fmiss.set(int(h.fast_fish_miss_rate * 100))
+        self.lbl_fmiss.configure(text=str(int(h.fast_fish_miss_rate * 100)))
 
         # Tüm toggle'ları varsayılana döndür
+        self.seg_targeting.set("Organik (Mouse Akıcı)")
         self.switch_armor.deselect()
         self.switch_fatigue.select()
         self.switch_trash.select()
@@ -369,6 +429,18 @@ class FishingBotGUI(ctk.CTk):
         self.entry_drop_x.insert(0, str(a.trash_drop_x))
         self.entry_drop_y.delete(0, "end")
         self.entry_drop_y.insert(0, str(a.trash_drop_y))
+        
+        self.entry_amin.delete(0, "end")
+        self.entry_amin.insert(0, str(a.auto_mode_min_mins))
+        self.entry_amax.delete(0, "end")
+        self.entry_amax.insert(0, str(a.auto_mode_max_mins))
+        self.entry_aterm.delete(0, "end")
+        self.entry_aterm.insert(0, str(a.auto_weight_terminator))
+        self.entry_aespo.delete(0, "end")
+        self.entry_aespo.insert(0, str(a.auto_weight_esports))
+        self.entry_asafe.delete(0, "end")
+        self.entry_asafe.insert(0, str(a.auto_weight_safe))
+
         self.switch_gauss.select()
         self.switch_micro.select()
         self.switch_dynrhythm.select()
@@ -402,6 +474,13 @@ class FishingBotGUI(ctk.CTk):
         self.lbl_predth.configure(text=str(int(c.human.prediction_speed_threshold)))
         self.slider_margin.set(int(c.human.click_inner_margin * 100))
         self.lbl_margin.configure(text=str(int(c.human.click_inner_margin * 100)))
+        self.slider_pnoise.set(c.human.prediction_noise_sigma)
+        self.lbl_pnoise.configure(text=f"{c.human.prediction_noise_sigma:.2f}")
+        
+        self.slider_miss.set(int(c.human.intentional_miss_rate * 100))
+        self.lbl_miss.configure(text=str(int(c.human.intentional_miss_rate * 100)))
+        self.slider_fmiss.set(int(c.human.fast_fish_miss_rate * 100))
+        self.lbl_fmiss.configure(text=str(int(c.human.fast_fish_miss_rate * 100)))
         # Zırh switch'i + konum label'ı
         if c.autobot.use_armor_trick:
             self.switch_armor.select()
@@ -413,6 +492,11 @@ class FishingBotGUI(ctk.CTk):
             self.lbl_armor_pos.configure(text="Zırh Konumu: Ayarlanmadı")
 
         # Otonom toggle'lar
+        if c.human.targeting_mode == "terminator":
+            self.seg_targeting.set("Terminatör (Mouse Işınlanır)")
+        else:
+            self.seg_targeting.set("Organik (Mouse Akıcı)")
+
         if c.autobot.use_fatigue_system:
             self.switch_fatigue.select()
         else:
@@ -426,11 +510,22 @@ class FishingBotGUI(ctk.CTk):
         else:
             self.switch_open_fish.deselect()
 
-        # Çöp atma hedef koordinatları
+        # Çöp atma hedef koordinatları ve Auto mod
         self.entry_drop_x.delete(0, "end")
         self.entry_drop_x.insert(0, str(c.autobot.trash_drop_x))
         self.entry_drop_y.delete(0, "end")
         self.entry_drop_y.insert(0, str(c.autobot.trash_drop_y))
+
+        self.entry_amin.delete(0, "end")
+        self.entry_amin.insert(0, str(c.autobot.auto_mode_min_mins))
+        self.entry_amax.delete(0, "end")
+        self.entry_amax.insert(0, str(c.autobot.auto_mode_max_mins))
+        self.entry_aterm.delete(0, "end")
+        self.entry_aterm.insert(0, str(c.autobot.auto_weight_terminator))
+        self.entry_aespo.delete(0, "end")
+        self.entry_aespo.insert(0, str(c.autobot.auto_weight_esports))
+        self.entry_asafe.delete(0, "end")
+        self.entry_asafe.insert(0, str(c.autobot.auto_weight_safe))
 
         # Anti-cheat toggle'lar
         if c.human.use_gaussian_jitter:
@@ -471,6 +566,13 @@ class FishingBotGUI(ctk.CTk):
         # Otonom İnsanlaştırma ve Envanter
         ctk.CTkLabel(tab, text="Yapay Zeka & Organik Davranış", font=ctk.CTkFont(weight="bold")).pack(pady=(15, 5))
 
+        f_target = ctk.CTkFrame(tab)
+        f_target.pack(fill="x", padx=10, pady=5)
+        ctk.CTkLabel(f_target, text="Hedefleme Modu:", width=110).pack(side="left", padx=5)
+        self.seg_targeting = ctk.CTkSegmentedButton(f_target, values=["Organik (Mouse Akıcı)", "Terminatör (Mouse Işınlanır)"], command=lambda v: self._on_extras_toggle())
+        self.seg_targeting.pack(side="left", padx=5, fill="x", expand=True)
+        self.seg_targeting.set("Organik (Mouse Akıcı)")
+
         self.switch_fatigue = ctk.CTkSwitch(tab, text="İnsan Yorulması (Mola Sistemi) Aktif",
                                              command=self._on_extras_toggle)
         self.switch_fatigue.pack(pady=5)
@@ -501,6 +603,28 @@ class FishingBotGUI(ctk.CTk):
         self.switch_open_fish.select()
         ctk.CTkLabel(tab, text="  Envanterdeki balıkları template matching ile tespit eder,\nsağ tık ile açar.", text_color="#aaaaaa").pack()
 
+        # ── Kasıtlı Iskalama ──
+        f_miss = ctk.CTkFrame(tab)
+        f_miss.pack(fill="x", padx=10, pady=2)
+        ctk.CTkLabel(f_miss, text="Normal Iskalama (%):", width=140).pack(side="left", padx=5)
+        self.slider_miss = ctk.CTkSlider(f_miss, from_=0, to=100, number_of_steps=100, width=180)
+        self.slider_miss.pack(side="left", padx=5)
+        self.slider_miss.set(8)
+        self.lbl_miss = ctk.CTkLabel(f_miss, text="8", width=30)
+        self.lbl_miss.pack(side="left", padx=5)
+        self.slider_miss.configure(command=lambda v: self._on_slider_update(self.lbl_miss, v, 0))
+
+        f_fmiss = ctk.CTkFrame(tab)
+        f_fmiss.pack(fill="x", padx=10, pady=2)
+        ctk.CTkLabel(f_fmiss, text="Hızlı Balık Iskalama (%):", width=140).pack(side="left", padx=5)
+        self.slider_fmiss = ctk.CTkSlider(f_fmiss, from_=0, to=100, number_of_steps=100, width=180)
+        self.slider_fmiss.pack(side="left", padx=5)
+        self.slider_fmiss.set(18)
+        self.lbl_fmiss = ctk.CTkLabel(f_fmiss, text="18", width=30)
+        self.lbl_fmiss.pack(side="left", padx=5)
+        self.slider_fmiss.configure(command=lambda v: self._on_slider_update(self.lbl_fmiss, v, 0))
+        ctk.CTkLabel(tab, text="  0 = Asla bilerek kaçırma (Ban riski artar)", text_color="gray").pack(pady=(0, 5))
+
         # ── Anti-Cheat Koruma ──
         ctk.CTkLabel(tab, text="Anti-Cheat Koruma", font=ctk.CTkFont(weight="bold")).pack(pady=(15, 5))
 
@@ -526,6 +650,109 @@ class FishingBotGUI(ctk.CTk):
 
     # ── Metodlar ──
     
+    def _auto_mode_loop(self):
+        if self.seg_modes_top.get() != "Auto Mod":
+            self._auto_mode_running = False
+            return
+            
+        c = self.config
+        import random
+        # Ağırlıklara göre mod seçimi
+        modes = ["Terminatör", "E-Sporcu", "Güvenli"]
+        weights = [c.autobot.auto_weight_terminator, c.autobot.auto_weight_esports, c.autobot.auto_weight_safe]
+        if sum(weights) <= 0:
+            weights = [10, 40, 50]
+            
+        chosen = random.choices(modes, weights=weights)[0]
+        
+        # Seçili moda geç
+        self._apply_preset(chosen, is_auto=True)
+        
+        # Sonraki çalışma zamanını hesapla
+        min_ms = c.autobot.auto_mode_min_mins * 60 * 1000
+        max_ms = c.autobot.auto_mode_max_mins * 60 * 1000
+        if max_ms < min_ms:
+            max_ms = min_ms
+        next_interval_ms = random.randint(min_ms, max_ms)
+        self.after(next_interval_ms, self._auto_mode_loop)
+
+    def _apply_preset(self, preset_name, is_auto=False):
+        c = self.config
+        
+        if preset_name == "Auto Mod":
+            if not getattr(self, "_auto_mode_running", False):
+                self._auto_mode_running = True
+                self.lbl_auto_status.configure(text="Auto Mod: Başlatılıyor...")
+                self._auto_mode_loop()
+            return
+            
+        if not is_auto:
+            self._auto_mode_running = False
+            self.lbl_auto_status.configure(text="")
+            
+        if preset_name == "Terminatör":
+            c.human.reaction_min = 0.08
+            c.human.reaction_max = 0.13
+            c.human.click_cooldown = 0.30
+            c.human.horizontal_jitter_px = 0
+            c.human.prediction_lead_factor = 0.75
+            c.human.prediction_max_lead_px = 30
+            c.human.prediction_speed_threshold = 150.0
+            c.human.prediction_noise_sigma = 0.0
+            c.human.click_inner_margin = 0.95
+            c.human.intentional_miss_rate = 0.0
+            c.human.fast_fish_miss_rate = 0.0
+            c.human.targeting_mode = "terminator"
+            
+            c.human.use_micro_movement = True
+            c.human.use_dynamic_rhythm = False
+            c.human.use_gaussian_jitter = False
+            c.human.use_fps_jitter = False
+
+        elif preset_name == "E-Sporcu":
+            c.human.reaction_min = 0.12
+            c.human.reaction_max = 0.17
+            c.human.click_cooldown = 0.33
+            c.human.horizontal_jitter_px = 1
+            c.human.prediction_lead_factor = 0.75
+            c.human.prediction_max_lead_px = 30
+            c.human.prediction_speed_threshold = 50.0
+            c.human.prediction_noise_sigma = 0.05
+            c.human.click_inner_margin = 0.90
+            c.human.intentional_miss_rate = 0.02
+            c.human.fast_fish_miss_rate = 0.05
+            c.human.targeting_mode = "organic"
+            
+            c.human.use_micro_movement = True
+            c.human.use_dynamic_rhythm = True
+            c.human.use_gaussian_jitter = True
+            c.human.use_fps_jitter = False
+            
+        elif preset_name == "Güvenli":
+            c.human.reaction_min = 0.16
+            c.human.reaction_max = 0.21
+            c.human.click_cooldown = 0.38
+            c.human.horizontal_jitter_px = 3
+            c.human.prediction_lead_factor = 0.60
+            c.human.prediction_max_lead_px = 25
+            c.human.prediction_speed_threshold = 40.0
+            c.human.prediction_noise_sigma = 0.15
+            c.human.click_inner_margin = 0.85
+            c.human.intentional_miss_rate = 0.08
+            c.human.fast_fish_miss_rate = 0.18
+            c.human.targeting_mode = "organic"
+            
+            c.human.use_micro_movement = True
+            c.human.use_dynamic_rhythm = True
+            c.human.use_gaussian_jitter = True
+            c.human.use_fps_jitter = True
+            
+        if is_auto:
+            self.lbl_auto_status.configure(text=f"Auto Mod Aktif: Şu an [{preset_name}] devrede")
+            
+        self._load_sliders_from_config()
+        self.config.save_calibration()
+
     def log(self, message: str):
         self.log_textbox.insert("end", f"[{time.strftime('%H:%M:%S')}] {message}\n")
         self.log_textbox.see("end")
@@ -542,6 +769,7 @@ class FishingBotGUI(ctk.CTk):
     def _on_extras_toggle(self):
         """TÜM Zırh & Ekstralar toggle'larını CANLI olarak config'e yazar ve kaydeder."""
         c = self.config
+        c.human.targeting_mode = "terminator" if self.seg_targeting.get() == "Terminatör (Mouse Işınlanır)" else "organic"
         c.autobot.use_armor_trick = self.switch_armor.get() == 1
         c.autobot.use_fatigue_system = self.switch_fatigue.get() == 1
         c.autobot.auto_drop_trash = self.switch_trash.get() == 1
@@ -553,6 +781,14 @@ class FishingBotGUI(ctk.CTk):
         try:
             c.autobot.trash_drop_x = int(self.entry_drop_x.get())
             c.autobot.trash_drop_y = int(self.entry_drop_y.get())
+        except ValueError:
+            pass
+        try:
+            c.autobot.auto_mode_min_mins = int(self.entry_amin.get())
+            c.autobot.auto_mode_max_mins = int(self.entry_amax.get())
+            c.autobot.auto_weight_terminator = int(self.entry_aterm.get())
+            c.autobot.auto_weight_esports = int(self.entry_aespo.get())
+            c.autobot.auto_weight_safe = int(self.entry_asafe.get())
         except ValueError:
             pass
         c.save_calibration()
@@ -572,6 +808,10 @@ class FishingBotGUI(ctk.CTk):
         self.config.human.prediction_max_lead_px = int(self.slider_maxlead.get())
         self.config.human.prediction_speed_threshold = float(self.slider_predth.get())
         self.config.human.click_inner_margin = self.slider_margin.get() / 100.0
+        self.config.human.prediction_noise_sigma = round(self.slider_pnoise.get(), 2)
+        
+        self.config.human.intentional_miss_rate = self.slider_miss.get() / 100.0
+        self.config.human.fast_fish_miss_rate = self.slider_fmiss.get() / 100.0
         # Tüm toggle'ları da uygula (güvenlik: bot başlarken)
         self._on_extras_toggle()
         

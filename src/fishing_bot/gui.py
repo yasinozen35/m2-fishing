@@ -143,7 +143,8 @@ class FishingBotGUI(ctk.CTk):
         
         self.seg_modes_top = ctk.CTkSegmentedButton(self.f_modes, values=["Terminatör", "E-Sporcu", "Güvenli", "Auto Mod"], command=lambda v: self._apply_preset(v))
         self.seg_modes_top.pack(fill="x", padx=10, pady=5)
-        self.seg_modes_top.set("Güvenli")
+        self.seg_modes_top.set("Auto Mod")
+        self.after(100, lambda: self._apply_preset("Auto Mod"))
         
         self.lbl_auto_status = ctk.CTkLabel(self.f_modes, text="", font=ctk.CTkFont(size=11, slant="italic"), text_color="cyan")
         self.lbl_auto_status.pack(pady=(0, 5))
@@ -154,10 +155,12 @@ class FishingBotGUI(ctk.CTk):
         self.tabview.add("Ana Ekran")
         self.tabview.add("Ayarlar")
         self.tabview.add("Zırh & Ekstralar")
+        self.tabview.add("Balıklar")
         
         self._build_dashboard_tab()
         self._build_settings_tab()
         self._build_extras_tab()
+        self._build_fishes_tab()
 
         # Tüm sekmeler oluştuktan sonra config'i slider'lara yükle
         self._load_sliders_from_config()
@@ -555,7 +558,10 @@ class FishingBotGUI(ctk.CTk):
                                            command=self._on_extras_toggle)
         self.switch_armor.pack(pady=10)
 
-        self.lbl_armor_pos = ctk.CTkLabel(tab, text="Zırh Konumu: Ayarlanmadı")
+        armor_text = "Zırh Konumu: Ayarlanmadı"
+        if self.config.autobot.armor_x > 0 or self.config.autobot.armor_y > 0:
+            armor_text = f"Zırh Konumu: X={self.config.autobot.armor_x}, Y={self.config.autobot.armor_y}"
+        self.lbl_armor_pos = ctk.CTkLabel(tab, text=armor_text)
         self.lbl_armor_pos.pack(pady=5)
 
         self.btn_set_armor = ctk.CTkButton(tab, text="📍 Zırh Konumunu Seç", command=self.start_armor_pos_selection)
@@ -777,6 +783,65 @@ class FishingBotGUI(ctk.CTk):
         # Config'e anında yaz — bot çalışırken değişiklikler hemen etki eder
         self._apply_sliders_to_config()
 
+    def _build_fishes_tab(self):
+        tab = self.tabview.tab("Balıklar")
+        
+        c = self.config.autobot
+        
+        # Üst Kısım: Master Switch
+        self.switch_use_fish_ocr = ctk.CTkSwitch(tab, text="Otomatik Balık İptal Sistemi Aktif (Chat OCR)", command=self._on_extras_toggle)
+        self.switch_use_fish_ocr.pack(pady=(10, 5))
+        if c.use_fish_ocr:
+            self.switch_use_fish_ocr.select()
+        else:
+            self.switch_use_fish_ocr.deselect()
+
+        # Özel Balık Ekleme
+        f_add_fish = ctk.CTkFrame(tab)
+        f_add_fish.pack(fill="x", padx=20, pady=5)
+        
+        self.entry_custom_fish = ctk.CTkEntry(f_add_fish, placeholder_text="Örn: Somon", width=200)
+        self.entry_custom_fish.pack(side="left", padx=(10, 5), pady=5)
+        
+        btn_add_fish = ctk.CTkButton(f_add_fish, text="Balık Ekle", width=80, command=self.add_custom_fish)
+        btn_add_fish.pack(side="left", padx=5, pady=5)
+        
+        ctk.CTkLabel(tab, text="İstenmeyen Balıkları Seçin (ESC ile İptal Edilir)", font=ctk.CTkFont(weight="bold")).pack(pady=(15, 5))
+        
+        # Fish Checkboxes
+        self.fishes_frame = ctk.CTkScrollableFrame(tab, height=250)
+        self.fishes_frame.pack(fill="both", expand=True, padx=20, pady=5)
+        
+        default_fishes = [
+            "Minik Balık", "Sudak Balığı", "Büyük Sudak Balığı", "Altın Sudak", "Sazan",
+            "Som Balığı", "Ot Sazanı", "Alabalık", "Dere Alabalığı", "Yılan Başı Balığı",
+            "Şiraz Balığı", "Yayın", "Çopra", "Palamut", "Zargana", "Gümüş Balığı",
+            "Uskumru", "Levrek", "Ringa Balığı", "Yabbie", "Kadife Balığı", "Kurbağa Balığı",
+            "Kral Yengeci", "Altın Yüzük", "Görünmezlik Pelerini", "Bilge Kralın Eldiveni",
+            "Hırsızın Eldiveni", "Kaçak Pelerin", "Lucy'nin Yüzüğü", "Denizkızı Anahtarı", "Saç Boyası"
+        ]
+        
+        all_fishes = list(dict.fromkeys(default_fishes + c.custom_fishes))
+        
+        self.fish_vars = {}
+        for fish in all_fishes:
+            self._create_fish_checkbox(fish, (fish in c.ignored_fishes))
+            
+        # Chat Region Selection
+        ctk.CTkLabel(tab, text="Sohbet Taraması Bölgesi (Chat OCR)", font=ctk.CTkFont(weight="bold")).pack(pady=(15, 5))
+        
+        f_region = ctk.CTkFrame(tab)
+        f_region.pack(fill="x", padx=20, pady=5)
+        
+        self.lbl_chat_region = ctk.CTkLabel(f_region, text=f"Bölge: X={c.chat_region_x}, Y={c.chat_region_y}, W={c.chat_region_w}, H={c.chat_region_h}")
+        self.lbl_chat_region.pack(side="left", padx=10, pady=10)
+        
+        self.btn_set_chat = ctk.CTkButton(f_region, text="📍 Bölge Seç", width=100, command=self.start_chat_region_selection)
+        self.btn_set_chat.pack(side="right", padx=10, pady=10)
+
+        ctk.CTkLabel(tab, text="Not: Butona bastıktan sonra ekrandan sohbet bölgesini fareyle sürükleyip seçin\nve ENTER tuşuna basarak onaylayın.", text_color="gray", font=ctk.CTkFont(size=11)).pack(pady=5)
+
+
     def _on_extras_toggle(self):
         """TÜM Zırh & Ekstralar toggle'larını CANLI olarak config'e yazar ve kaydeder."""
         c = self.config
@@ -802,7 +867,30 @@ class FishingBotGUI(ctk.CTk):
             c.autobot.auto_weight_safe = int(self.entry_asafe.get())
         except ValueError:
             pass
+            
+        if hasattr(self, 'switch_use_fish_ocr'):
+            c.autobot.use_fish_ocr = self.switch_use_fish_ocr.get() == 1
+            
         c.save_calibration()
+        self.log("Ayarlar kaydedildi.")
+
+    def add_custom_fish(self):
+        new_fish = self.entry_custom_fish.get().strip()
+        if new_fish and new_fish not in self.fish_vars:
+            c = self.config.autobot
+            if new_fish not in c.custom_fishes:
+                c.custom_fishes.append(new_fish)
+                self.config.save_calibration()
+            self._create_fish_checkbox(new_fish, True)
+            self._update_ignored_fishes()
+            self.entry_custom_fish.delete(0, 'end')
+            self.log(f"Yeni balık/eşya eklendi: {new_fish}")
+
+    def _create_fish_checkbox(self, fish: str, is_checked: bool):
+        var = ctk.BooleanVar(value=is_checked)
+        self.fish_vars[fish] = var
+        chk = ctk.CTkCheckBox(self.fishes_frame, text=fish, variable=var, command=self._update_ignored_fishes)
+        chk.pack(anchor="w", pady=5, padx=10)
 
     def _apply_sliders_to_config(self):
         """Tüm slider değerlerini config nesnesine yazar ve OTOMATİK KAYDEDER."""
@@ -885,6 +973,69 @@ class FishingBotGUI(ctk.CTk):
         self.switch_armor.select() # Otomatik aktif et
         self.config.save_calibration()
         self.log(f"Zirh konumu kaydedildi: X={x}, Y={y}")
+
+    def _update_ignored_fishes(self):
+        ignored = []
+        for fish, var in self.fish_vars.items():
+            if var.get():
+                ignored.append(fish)
+        self.config.autobot.ignored_fishes = ignored
+        self.config.save_calibration()
+        
+    def start_chat_region_selection(self):
+        import threading
+        self.btn_set_chat.configure(state="disabled")
+        self.log("Sohbet bolgesi secimi baslatildi. Ekranda cizip ENTER'a basin.")
+        threading.Thread(target=self._run_chat_calibration, daemon=True).start()
+
+    def _run_chat_calibration(self):
+        try:
+            import mss
+            import numpy as np
+            import cv2
+            with mss.mss() as sct:
+                monitor = sct.monitors[1]
+                raw = sct.grab(monitor)
+                full_screen = np.array(raw, dtype=np.uint8)[:, :, :3]
+            
+            h, w = full_screen.shape[:2]
+            display_scale = 1.0
+            max_display = 1200
+            if w > max_display:
+                display_scale = max_display / w
+                display = cv2.resize(full_screen, (int(w * display_scale), int(h * display_scale)))
+            else:
+                display = full_screen
+                
+            # OpenCV penceresini en öne getirme hilesi
+            cv2.namedWindow("Sohbet Bolgesini Secin (ENTER=Onayla, C=Iptal)", cv2.WINDOW_NORMAL)
+            cv2.setWindowProperty("Sohbet Bolgesini Secin (ENTER=Onayla, C=Iptal)", cv2.WND_PROP_TOPMOST, 1)
+            
+            roi = cv2.selectROI("Sohbet Bolgesini Secin (ENTER=Onayla, C=Iptal)", display, fromCenter=False, showCrosshair=True)
+            cv2.destroyAllWindows()
+            
+            if roi != (0, 0, 0, 0):
+                x, y, rw, rh = roi
+                real_x = int(x / display_scale)
+                real_y = int(y / display_scale)
+                real_w = int(rw / display_scale)
+                real_h = int(rh / display_scale)
+                
+                self.config.autobot.chat_region_x = real_x
+                self.config.autobot.chat_region_y = real_y
+                self.config.autobot.chat_region_w = real_w
+                self.config.autobot.chat_region_h = real_h
+                self.config.save_calibration()
+                
+                self.after(0, lambda: self.lbl_chat_region.configure(text=f"Bölge: X={real_x}, Y={real_y}, W={real_w}, H={real_h}"))
+                self.log(f"Chat bolgesi kaydedildi: W={real_w}, H={real_h}")
+            else:
+                self.log("Chat bolgesi secimi iptal edildi.")
+                
+        except Exception as e:
+            self.log(f"Secim sirasinda hata: {e}")
+        finally:
+            self.after(0, lambda: self.btn_set_chat.configure(state="normal"))
 
 def launch_gui():
     import platform

@@ -12,6 +12,7 @@ dependencies = [
     "customtkinter>=5.2.2",
     "requests>=2.31.0",
     "pydirectinput>=1.0.4",
+    "pytesseract>=0.3.10",
 ]
 
 [project.scripts]

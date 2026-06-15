@@ -181,6 +181,15 @@ class AutoBotConfig:
     use_armor_trick: bool = False # Zırh çıkar-tak aktif mi?
     auto_open_fishes: bool = True # Yakalanan balıklar otomatik açılsın mı?
     
+    # ── Chat Okuma & İptal ──
+    ignored_fishes: list = field(default_factory=list) # İptal edilecek balıklar listesi
+    custom_fishes: list = field(default_factory=list)
+    use_fish_ocr: bool = True
+    chat_region_x: int = 0
+    chat_region_y: int = 0
+    chat_region_w: int = 400
+    chat_region_h: int = 200
+    
     # ── Auto Mod Ayarları ──
     auto_mode_min_mins: int = 3
     auto_mode_max_mins: int = 8
@@ -260,6 +269,13 @@ class Config:
             "use_armor_trick": self.autobot.use_armor_trick,
             "auto_drop_trash": self.autobot.auto_drop_trash,
             "use_fatigue_system": self.autobot.use_fatigue_system,
+            "ignored_fishes": self.autobot.ignored_fishes,
+            "custom_fishes": self.autobot.custom_fishes,
+            "use_fish_ocr": self.autobot.use_fish_ocr,
+            "chat_region_x": self.autobot.chat_region_x,
+            "chat_region_y": self.autobot.chat_region_y,
+            "chat_region_w": self.autobot.chat_region_w,
+            "chat_region_h": self.autobot.chat_region_h,
             # Human — reaksiyon & tıklama
             "reaction_min": self.human.reaction_min,
             "reaction_max": self.human.reaction_max,
@@ -317,6 +333,7 @@ class Config:
                     self.capture.height = data.get("capture_height", self.capture.height)
                     # Zırh
                     self.autobot.armor_x = data.get("armor_x", self.autobot.armor_x)
+                    self.autobot.armor_y = data.get("armor_y", self.autobot.armor_y)
                     self.autobot.trash_drop_x = data.get("trash_drop_x", self.autobot.trash_drop_x)
                     self.autobot.trash_drop_y = data.get("trash_drop_y", self.autobot.trash_drop_y)
                     self.autobot.auto_open_fishes = data.get("auto_open_fishes", self.autobot.auto_open_fishes)
@@ -328,6 +345,13 @@ class Config:
                     self.autobot.use_armor_trick = data.get("use_armor_trick", self.autobot.use_armor_trick)
                     self.autobot.auto_drop_trash = data.get("auto_drop_trash", self.autobot.auto_drop_trash)
                     self.autobot.use_fatigue_system = data.get("use_fatigue_system", self.autobot.use_fatigue_system)
+                    self.autobot.ignored_fishes = data.get("ignored_fishes", self.autobot.ignored_fishes)
+                    self.autobot.custom_fishes = data.get("custom_fishes", self.autobot.custom_fishes)
+                    self.autobot.use_fish_ocr = data.get("use_fish_ocr", self.autobot.use_fish_ocr)
+                    self.autobot.chat_region_x = data.get("chat_region_x", self.autobot.chat_region_x)
+                    self.autobot.chat_region_y = data.get("chat_region_y", self.autobot.chat_region_y)
+                    self.autobot.chat_region_w = data.get("chat_region_w", self.autobot.chat_region_w)
+                    self.autobot.chat_region_h = data.get("chat_region_h", self.autobot.chat_region_h)
                     # Human — reaksiyon & tıklama
                     self.human.reaction_min = data.get("reaction_min", self.human.reaction_min)
                     self.human.reaction_max = data.get("reaction_max", self.human.reaction_max)

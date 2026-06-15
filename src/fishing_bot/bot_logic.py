@@ -225,6 +225,80 @@ class BotLogic:
                 if now - self._hesitation_start < self._hesitation_duration:
                     return False, status_msg
                 self._hesitation_start = 0.0
+                
+                # ── İPTAL SİSTEMİ (Chat OCR) ──
+                if not hasattr(self, '_chat_reader') or self._chat_reader is None:
+                    from fishing_bot.chat_reader import ChatReader
+                    self._chat_reader = ChatReader({
+                        'top': self._cfg.chat_region_y,
+                        'left': self._cfg.chat_region_x,
+                        'width': self._cfg.chat_region_w,
+                        'height': self._cfg.chat_region_h
+                    })
+                else:
+                    self._chat_reader.update_region(
+                        self._cfg.chat_region_x, self._cfg.chat_region_y,
+                        self._cfg.chat_region_w, self._cfg.chat_region_h
+                    )
+                
+                if self._cfg.use_fish_ocr and self._cfg.ignored_fishes and self._cfg.chat_region_w > 0 and self._cfg.chat_region_h > 0:
+                    hooked_fish = None
+                    
+                    # Metin2'deki tüm balık ve eşyalar (Uzunluklarına göre sıralanıp alt dize çakışmaları engellenecek)
+                    KNOWN_FISHES = [
+                        "Büyük Sudak Balığı", "Yılan Başı Balığı", "Görünmezlik Pelerini", "Bilge Kralın Eldiveni",
+                        "Hırsızın Eldiveni", "Denizkızı Anahtarı", "Lucy'nin Yüzüğü", "Kurbağa Balığı",
+                        "Dere Alabalığı", "Kadife Balığı", "Kral Yengeci", "Altın Yüzük", "Kaçak Pelerin", 
+                        "Ringa Balığı", "Gümüş Balığı", "Şiraz Balığı", "Sudak Balığı", "Altın Sudak", 
+                        "Ot Sazanı", "Som Balığı", "Minik Balık", "Saç Boyası", "Alabalık", "Uskumru", 
+                        "Palamut", "Zargana", "Yabbie", "Levrek", "Yayın", "Çopra", "Sazan"
+                    ]
+                    
+                    # Chat yazısının ekrana düşmesi oyun motorunda gecikebilir
+                    for _ in range(5):
+                        raw_chat = self._chat_reader.get_raw_chat()
+                        if raw_chat:
+                            lines = raw_chat.split('\n')
+                            # En son (en alttaki) mesajlara öncelik ver
+                            for line in reversed(lines):
+                                # Oyuncu mesajlarını (içinde ':' olan) atla, sadece sistem mesajlarına bak
+                                if ":" in line:
+                                    continue
+                                
+                                line_lower = line.lower()
+                                detected_known_fish = None
+                                
+                                # Hangi balığın tutulduğunu tam olarak tespit et (örneğin Büyük Sudak Balığı mı Sudak Balığı mı)
+                                for known in KNOWN_FISHES:
+                                    if known.lower() in line_lower:
+                                        detected_known_fish = known
+                                        break # KNOWN_FISHES uzunluğa göre sıralı olduğu için ilk eşleşen en doğru olandır
+                                
+                                # Tespit edilen balık bizim iptal listemizde var mı kontrol et
+                                if detected_known_fish:
+                                    for ignored_fish in self._cfg.ignored_fishes:
+                                        # İptal listesindeki balıklarla tam eşleşme arıyoruz
+                                        if ignored_fish.lower() == detected_known_fish.lower():
+                                            hooked_fish = detected_known_fish
+                                            break
+                                
+                                if hooked_fish:
+                                    break
+                        
+                        if hooked_fish:
+                            break
+                        time.sleep(0.06)  # 60ms bekle ve tekrar oku
+                        
+                    if hooked_fish:
+                        # İnsan okuma ve tepki verme süresi (Kullanıcı isteğiyle 1 sn yapıldı)
+                        time.sleep(random.uniform(0.9, 1.2))
+                        
+                        # İptal et (ESC tuşu) insani basma süresiyle
+                        self._clicker.press_key('esc', hold_min=0.10, hold_max=0.22)
+                        self._transition_to(BotState.POST_CATCH)
+                        status_msg = f"İptal Edildi: {hooked_fish}"
+                        return False, status_msg
+
                 self._transition_to(BotState.MINIGAME)
             else:
                 # Circle yok → sayacı sıfırla, tereddütü de sıfırla

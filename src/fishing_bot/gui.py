@@ -712,8 +712,8 @@ class FishingBotGUI(ctk.CTk):
             c.human.reaction_max = 0.13
             c.human.click_cooldown = 0.30
             c.human.horizontal_jitter_px = 0
-            c.human.prediction_lead_factor = 0.75
-            c.human.prediction_max_lead_px = 30
+            c.human.prediction_lead_factor = 0.20
+            c.human.prediction_max_lead_px = 15
             c.human.prediction_speed_threshold = 150.0
             c.human.prediction_noise_sigma = 0.0
             c.human.click_inner_margin = 0.95
@@ -731,10 +731,10 @@ class FishingBotGUI(ctk.CTk):
             c.human.reaction_max = 0.17
             c.human.click_cooldown = 0.33
             c.human.horizontal_jitter_px = 1
-            c.human.prediction_lead_factor = 0.75
-            c.human.prediction_max_lead_px = 30
+            c.human.prediction_lead_factor = 0.05
+            c.human.prediction_max_lead_px = 10
             c.human.prediction_speed_threshold = 50.0
-            c.human.prediction_noise_sigma = 0.05
+            c.human.prediction_noise_sigma = 0.02
             c.human.click_inner_margin = 0.90
             c.human.intentional_miss_rate = 0.02
             c.human.fast_fish_miss_rate = 0.05
@@ -750,13 +750,13 @@ class FishingBotGUI(ctk.CTk):
             c.human.reaction_max = 0.21
             c.human.click_cooldown = 0.38
             c.human.horizontal_jitter_px = 3
-            c.human.prediction_lead_factor = 0.60
-            c.human.prediction_max_lead_px = 25
+            c.human.prediction_lead_factor = 0.0
+            c.human.prediction_max_lead_px = 0
             c.human.prediction_speed_threshold = 40.0
             c.human.prediction_noise_sigma = 0.15
             c.human.click_inner_margin = 0.85
-            c.human.intentional_miss_rate = 0.08
-            c.human.fast_fish_miss_rate = 0.18
+            c.human.intentional_miss_rate = 0.02
+            c.human.fast_fish_miss_rate = 0.05
             c.human.targeting_mode = "organic"
             
             c.human.use_micro_movement = True

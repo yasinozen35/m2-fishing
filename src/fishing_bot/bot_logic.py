@@ -244,15 +244,23 @@ class BotLogic:
                 if self._cfg.use_fish_ocr and self._cfg.ignored_fishes and self._cfg.chat_region_w > 0 and self._cfg.chat_region_h > 0:
                     hooked_fish = None
                     
-                    # Metin2'deki tüm balık ve eşyalar (Uzunluklarına göre sıralanıp alt dize çakışmaları engellenecek)
                     KNOWN_FISHES = [
                         "Büyük Sudak Balığı", "Yılan Başı Balığı", "Görünmezlik Pelerini", "Bilge Kralın Eldiveni",
                         "Hırsızın Eldiveni", "Denizkızı Anahtarı", "Lucy'nin Yüzüğü", "Kurbağa Balığı",
                         "Dere Alabalığı", "Kadife Balığı", "Kral Yengeci", "Altın Yüzük", "Kaçak Pelerin", 
-                        "Ringa Balığı", "Gümüş Balığı", "Şiraz Balığı", "Sudak Balığı", "Altın Sudak", 
+                        "Ringa Balığı", "Gümüş Balığı", "Şiraz Balığı", "Sudak Balığı", "Altın Sudak", "Altın Sudak Balığı",
                         "Ot Sazanı", "Som Balığı", "Minik Balık", "Saç Boyası", "Alabalık", "Uskumru", 
                         "Palamut", "Zargana", "Yabbie", "Levrek", "Yayın", "Çopra", "Sazan"
                     ]
+                    # Dinamik olarak en uzun isme göre sırala ki alt dize çakışmaları kesin olarak önlensin
+                    KNOWN_FISHES.sort(key=len, reverse=True)
+
+                    def normalize_tr(text):
+                        replacements = {'ü': 'u', 'ö': 'o', 'ı': 'i', 'ş': 's', 'ğ': 'g', 'ç': 'c', 'i̇': 'i'}
+                        text = text.lower()
+                        for k, v in replacements.items():
+                            text = text.replace(k, v)
+                        return text
                     
                     # Chat yazısının ekrana düşmesi oyun motorunda gecikebilir
                     for _ in range(5):
@@ -265,12 +273,12 @@ class BotLogic:
                                 if ":" in line:
                                     continue
                                 
-                                line_lower = line.lower()
+                                line_norm = normalize_tr(line)
                                 detected_known_fish = None
                                 
-                                # Hangi balığın tutulduğunu tam olarak tespit et (örneğin Büyük Sudak Balığı mı Sudak Balığı mı)
+                                # Hangi balığın tutulduğunu tam olarak tespit et
                                 for known in KNOWN_FISHES:
-                                    if known.lower() in line_lower:
+                                    if normalize_tr(known) in line_norm:
                                         detected_known_fish = known
                                         break # KNOWN_FISHES uzunluğa göre sıralı olduğu için ilk eşleşen en doğru olandır
                                 
@@ -278,7 +286,7 @@ class BotLogic:
                                 if detected_known_fish:
                                     for ignored_fish in self._cfg.ignored_fishes:
                                         # İptal listesindeki balıklarla tam eşleşme arıyoruz
-                                        if ignored_fish.lower() == detected_known_fish.lower():
+                                        if normalize_tr(ignored_fish) == normalize_tr(detected_known_fish):
                                             hooked_fish = detected_known_fish
                                             break
                                 
@@ -516,8 +524,6 @@ class BotLogic:
 
                 # ── ZIRH TRICK: Minigame bittiği ANDA zırh çıkar-tak ──
                 if self._cfg.use_armor_trick and self._cfg.armor_x > 0 and self._cfg.armor_y > 0:
-                    self._clicker.right_click_at(self._cfg.armor_x, self._cfg.armor_y)
-                    time.sleep(0.06)
                     self._clicker.right_click_at(self._cfg.armor_x, self._cfg.armor_y)
                     status_msg = "Zirh trick: Animasyon iptal edildi"
                     self._armor_trick_used = True

@@ -10,6 +10,7 @@ Oyun döngüsünü yönetir:
 6. Bekle ve başa dön (POST_CATCH)
 """
 
+import difflib
 import math
 import random
 import time
@@ -139,8 +140,16 @@ class BotLogic:
                         status_msg = "Minik Balik yeme takildi"
 
                 if not bait_clicked:
-                    self._clicker.press_key(self._cfg.key_bait)
-                    status_msg = "Hazirlik: Normal Yem takildi"
+                    # 200 kullanimda bir tusu degistir (1 -> 2 -> 3 -> 4 vb.)
+                    try:
+                        base_key = int(self._cfg.key_bait)
+                        offset = (self.total_casts // 200) % 4
+                        current_bait_key = str(base_key + offset)
+                    except ValueError:
+                        current_bait_key = self._cfg.key_bait
+
+                    self._clicker.press_key(current_bait_key)
+                    status_msg = f"Hazirlik: Normal Yem takildi (Tus: {current_bait_key})"
 
                 # Yem sonrası bekleme — olta atmak için (config'den ayarlanabilir)
                 self._block_until = now + self._randomize_delay(self._cfg.delay_after_bait)
@@ -252,6 +261,16 @@ class BotLogic:
                         "Ot Sazanı", "Som Balığı", "Minik Balık", "Saç Boyası", "Alabalık", "Uskumru", 
                         "Palamut", "Zargana", "Yabbie", "Levrek", "Yayın", "Çopra", "Sazan"
                     ]
+                    
+                    # Kullanıcının eklediği özel balıkları ve iptal listesindekileri tanınan kelimelere dahil et
+                    if hasattr(self._cfg, 'custom_fishes') and self._cfg.custom_fishes:
+                        KNOWN_FISHES.extend(self._cfg.custom_fishes)
+                    if hasattr(self._cfg, 'ignored_fishes') and self._cfg.ignored_fishes:
+                        KNOWN_FISHES.extend(self._cfg.ignored_fishes)
+                        
+                    # Tekrarlayan isimleri çıkar
+                    KNOWN_FISHES = list(set(KNOWN_FISHES))
+
                     # Dinamik olarak en uzun isme göre sırala ki alt dize çakışmaları kesin olarak önlensin
                     KNOWN_FISHES.sort(key=len, reverse=True)
 
@@ -276,11 +295,38 @@ class BotLogic:
                                 line_norm = normalize_tr(line)
                                 detected_known_fish = None
                                 
-                                # Hangi balığın tutulduğunu tam olarak tespit et
+                                # Hangi balığın tutulduğunu tam olarak tespit et (Fuzzy OCR eşleştirme)
+                                best_fish = None
+                                best_score = 0.0
+                                
                                 for known in KNOWN_FISHES:
-                                    if normalize_tr(known) in line_norm:
-                                        detected_known_fish = known
-                                        break # KNOWN_FISHES uzunluğa göre sıralı olduğu için ilk eşleşen en doğru olandır
+                                    known_norm = normalize_tr(known)
+                                    len_k = len(known_norm)
+                                    
+                                    if len(line_norm) < len_k:
+                                        # Metin balık adından kısaysa tamamına bak
+                                        ratio = difflib.SequenceMatcher(None, known_norm, line_norm).ratio()
+                                        m = ratio * (len_k + len(line_norm)) / 2.0
+                                        score = m * ratio
+                                        if score > best_score and ratio > 0.65:
+                                            best_score = score
+                                            best_fish = known
+                                    else:
+                                        # Karakter bazlı sliding window (OCR hatalarını kompanse eder)
+                                        # score = (Eşleşen Karakter Sayısı) * (Benzerlik Oranı)
+                                        # Bu formül sayesinde "Büyük Sudak Balığı" hatalı okunsa bile,
+                                        # "Sudak Balığı"nın 100% eşleşmesini yenecektir.
+                                        for i in range(len(line_norm) - len_k + 1):
+                                            window = line_norm[i:i+len_k]
+                                            ratio = difflib.SequenceMatcher(None, known_norm, window).ratio()
+                                            m = ratio * (len_k + len(window)) / 2.0
+                                            score = m * ratio
+                                            
+                                            if score > best_score and ratio > 0.65:
+                                                best_score = score
+                                                best_fish = known
+                                
+                                detected_known_fish = best_fish
                                 
                                 # Tespit edilen balık bizim iptal listemizde var mı kontrol et
                                 if detected_known_fish:

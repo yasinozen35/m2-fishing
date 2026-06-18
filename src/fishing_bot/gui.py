@@ -141,7 +141,7 @@ class FishingBotGUI(ctk.CTk):
         self.f_modes = ctk.CTkFrame(self.right_frame)
         self.f_modes.grid(row=0, column=0, padx=20, pady=(20, 0), sticky="ew")
         
-        self.seg_modes_top = ctk.CTkSegmentedButton(self.f_modes, values=["Terminatör", "E-Sporcu", "Güvenli", "Auto Mod"], command=lambda v: self._apply_preset(v))
+        self.seg_modes_top = ctk.CTkSegmentedButton(self.f_modes, values=["Terminatör", "Adrenalin", "E-Sporcu", "Güvenli", "Auto Mod"], command=lambda v: self._apply_preset(v))
         self.seg_modes_top.pack(fill="x", padx=10, pady=5)
         self.seg_modes_top.set("Auto Mod")
         self.after(100, lambda: self._apply_preset("Auto Mod"))
@@ -183,13 +183,28 @@ class FishingBotGUI(ctk.CTk):
         self.lbl_casts = ctk.CTkLabel(self.stats_frame, text="Atış Sayısı: 0")
         self.lbl_casts.grid(row=0, column=2, padx=20, pady=10)
         
+        # Alt Kısım: Log ve Sayaç
+        self.bottom_frame = ctk.CTkFrame(tab)
+        self.bottom_frame.grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
+        self.bottom_frame.grid_rowconfigure(0, weight=1)
+        self.bottom_frame.grid_rowconfigure(1, weight=1)
+        self.bottom_frame.grid_columnconfigure(0, weight=1)
+        
         # Konsol/Log
-        self.log_textbox = ctk.CTkTextbox(tab, height=200)
-        self.log_textbox.grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
+        self.log_textbox = ctk.CTkTextbox(self.bottom_frame, height=100)
+        self.log_textbox.grid(row=0, column=0, padx=0, pady=(0, 5), sticky="nsew")
         self.log("Sistem basariyla yuklendi.")
         
+        # Balık Sayacı
+        self.fish_counts_textbox = ctk.CTkTextbox(self.bottom_frame, height=100)
+        self.fish_counts_textbox.grid(row=1, column=0, padx=0, pady=(5, 0), sticky="nsew")
+        self.fish_counts_textbox.insert("end", "--- Görülen Balıklar ---\n")
+        self.fish_counts_textbox.configure(state="disabled")
+        
     def _build_settings_tab(self):
-        tab = self.tabview.tab("Ayarlar")
+        parent_tab = self.tabview.tab("Ayarlar")
+        tab = ctk.CTkScrollableFrame(parent_tab)
+        tab.pack(fill="both", expand=True)
         
         ctk.CTkLabel(tab, text="Klavye Tuşları", font=ctk.CTkFont(weight="bold")).pack(pady=(10, 5))
         
@@ -549,7 +564,9 @@ class FishingBotGUI(ctk.CTk):
             self.switch_fpsjitter.deselect()
 
     def _build_extras_tab(self):
-        tab = self.tabview.tab("Zırh & Ekstralar")
+        parent_tab = self.tabview.tab("Zırh & Ekstralar")
+        tab = ctk.CTkScrollableFrame(parent_tab)
+        tab.pack(fill="both", expand=True)
         
         # Zırh Çıkar Tak
         ctk.CTkLabel(tab, text="Zırh Animasyon İptali (Çıkar/Tak)", font=ctk.CTkFont(weight="bold")).pack(pady=(10, 5))
@@ -725,6 +742,25 @@ class FishingBotGUI(ctk.CTk):
             c.human.use_dynamic_rhythm = False
             c.human.use_gaussian_jitter = False
             c.human.use_fps_jitter = False
+            
+        elif preset_name == "Adrenalin":
+            c.human.reaction_min = 0.05
+            c.human.reaction_max = 0.10
+            c.human.click_cooldown = 0.25
+            c.human.horizontal_jitter_px = 1
+            c.human.prediction_lead_factor = 0.10
+            c.human.prediction_max_lead_px = 15
+            c.human.prediction_speed_threshold = 100.0
+            c.human.prediction_noise_sigma = 0.01
+            c.human.click_inner_margin = 0.95
+            c.human.intentional_miss_rate = 0.0
+            c.human.fast_fish_miss_rate = 0.0
+            c.human.targeting_mode = "organic"
+            
+            c.human.use_micro_movement = True
+            c.human.use_dynamic_rhythm = True
+            c.human.use_gaussian_jitter = True
+            c.human.use_fps_jitter = False
 
         elif preset_name == "E-Sporcu":
             c.human.reaction_min = 0.12
@@ -736,8 +772,8 @@ class FishingBotGUI(ctk.CTk):
             c.human.prediction_speed_threshold = 50.0
             c.human.prediction_noise_sigma = 0.02
             c.human.click_inner_margin = 0.90
-            c.human.intentional_miss_rate = 0.02
-            c.human.fast_fish_miss_rate = 0.05
+            c.human.intentional_miss_rate = 0.0
+            c.human.fast_fish_miss_rate = 0.0
             c.human.targeting_mode = "organic"
             
             c.human.use_micro_movement = True
@@ -755,8 +791,8 @@ class FishingBotGUI(ctk.CTk):
             c.human.prediction_speed_threshold = 40.0
             c.human.prediction_noise_sigma = 0.15
             c.human.click_inner_margin = 0.85
-            c.human.intentional_miss_rate = 0.02
-            c.human.fast_fish_miss_rate = 0.05
+            c.human.intentional_miss_rate = 0.0
+            c.human.fast_fish_miss_rate = 0.0
             c.human.targeting_mode = "organic"
             
             c.human.use_micro_movement = True
@@ -784,7 +820,9 @@ class FishingBotGUI(ctk.CTk):
         self._apply_sliders_to_config()
 
     def _build_fishes_tab(self):
-        tab = self.tabview.tab("Balıklar")
+        parent_tab = self.tabview.tab("Balıklar")
+        tab = ctk.CTkScrollableFrame(parent_tab)
+        tab.pack(fill="both", expand=True)
         
         c = self.config.autobot
         
@@ -815,10 +853,11 @@ class FishingBotGUI(ctk.CTk):
         default_fishes = [
             "Minik Balık", "Sudak Balığı", "Büyük Sudak Balığı", "Altın Sudak", "Sazan",
             "Som Balığı", "Ot Sazanı", "Alabalık", "Dere Alabalığı", "Yılan Başı Balığı",
-            "Şiraz Balığı", "Yayın", "Çopra", "Palamut", "Zargana", "Gümüş Balığı",
-            "Uskumru", "Levrek", "Ringa Balığı", "Yabbie", "Kadife Balığı", "Kurbağa Balığı",
+            "Şiraz Balığı", "Yayın Balığı", "Çopra", "Palamut", "Zargana", "Gümüş Balığı",
+            "Uskumru", "Levrek", "Ringa Balığı", "Yabbie Yengeci", "Kadife Balığı", "Kurbağa Balığı",
             "Kral Yengeci", "Altın Yüzük", "Görünmezlik Pelerini", "Bilge Kralın Eldiveni",
-            "Hırsızın Eldiveni", "Kaçak Pelerin", "Lucy'nin Yüzüğü", "Denizkızı Anahtarı", "Saç Boyası"
+            "Hırsızın Eldiveni", "Kaçak Pelerin", "Lucy'nin Yüzüğü", "Denizkızı Anahtarı", "Saç Boyası",
+            "Lüfer Balığı"
         ]
         
         all_fishes = list(dict.fromkeys(default_fishes + c.custom_fishes))
@@ -922,6 +961,67 @@ class FishingBotGUI(ctk.CTk):
         self.lbl_status.configure(text=f"Durum: {status}")
         self.lbl_catches.configure(text=f"Tutan Balık: {catches}")
         self.lbl_casts.configure(text=f"Atış Sayısı: {casts}")
+        
+        # Balık istatistiklerini güncelle ve Adrenalin (Focus) oto-tetikleme
+        self._last_yabbie_count = getattr(self, "_last_yabbie_count", 0)
+        self._adrenalin_end_time = getattr(self, "_adrenalin_end_time", 0.0)
+        self._previous_preset = getattr(self, "_previous_preset", None)
+
+        if self.bot_thread and hasattr(self.bot_thread, 'bot_logic') and self.bot_thread.bot_logic:
+            encountered = self.bot_thread.bot_logic.encountered_fishes
+            if encountered:
+                total_fishes = sum(encountered.values())
+                self.fish_counts_textbox.configure(state="normal")
+                self.fish_counts_textbox.delete("1.0", "end")
+                self.fish_counts_textbox.insert("end", f"--- Görülen Balıklar --- Toplam Balık: {total_fishes}\n")
+                for f, count in sorted(encountered.items(), key=lambda x: x[1], reverse=True):
+                    self.fish_counts_textbox.insert("end", f"{f}: {count}\n")
+                self.fish_counts_textbox.configure(state="disabled")
+                
+                # Otomatik Adrenalin Modu (Yabbie Yengeci için)
+                current_yabbie = encountered.get("Yabbie Yengeci", 0)
+                if current_yabbie > self._last_yabbie_count:
+                    self._last_yabbie_count = current_yabbie
+                    
+                    # --- YABBIE SESİ ÇAL ---
+                    try:
+                        import os
+                        import ctypes
+                        import threading
+                        # Ses dosyasının tam yolunu bul (script'in çalıştığı yere göre src/fishing_bot/music/submarine-sonar.mp3)
+                        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                        sound_path = os.path.join(base_dir, "src", "fishing_bot", "music", "submarine-sonar.mp3")
+                        
+                        if os.path.exists(sound_path):
+                            def _play_yabbie_sound():
+                                alias = "yabbie_sound"
+                                # Eğer zaten çalıyorsa durdur ve kapat
+                                ctypes.windll.winmm.mciSendStringW(f'close {alias}', None, 0, None)
+                                # Yeni dosyayı aç ve çal (Windows'un native MP3 oynatıcısı, pygame vb. gerektirmez)
+                                ctypes.windll.winmm.mciSendStringW(f'open "{sound_path}" alias {alias}', None, 0, None)
+                                ctypes.windll.winmm.mciSendStringW(f'play {alias}', None, 0, None)
+                            
+                            threading.Thread(target=_play_yabbie_sound, daemon=True).start()
+                        else:
+                            self.log("Uyarı: submarine-sonar.mp3 bulunamadı!")
+                    except Exception as e:
+                        self.log(f"Ses çalınırken hata: {e}")
+                    # -----------------------
+
+                    if self.seg_modes_top.get() != "Adrenalin":
+                        self._previous_preset = self.seg_modes_top.get()
+                        self.log("Yabbie tespit edildi! 15 saniyeligine Adrenalin (Focus) moduna geciliyor...")
+                        self.seg_modes_top.set("Adrenalin")
+                        self._apply_preset("Adrenalin", is_auto=True)
+                        self._adrenalin_end_time = time.time() + 15.0
+            
+            # Adrenalin süresi doldu mu kontrolü
+            if self._adrenalin_end_time > 0 and time.time() > self._adrenalin_end_time:
+                self._adrenalin_end_time = 0.0
+                if self._previous_preset and self.seg_modes_top.get() == "Adrenalin":
+                    self.log(f"Adrenalin suresi doldu. Eski moda ({self._previous_preset}) donuluyor.")
+                    self.seg_modes_top.set(self._previous_preset)
+                    self._apply_preset(self._previous_preset, is_auto=True)
 
     def toggle_bot(self):
         if self.bot_thread and self.bot_thread.running:
@@ -948,6 +1048,7 @@ class FishingBotGUI(ctk.CTk):
             self.btn_start.configure(text="⏹ Durdur", fg_color="red", hover_color="darkred")
             self.btn_calibrate.configure(state="disabled")
             
+            self._last_yabbie_count = 0  # Yeni bot başlatıldığında yabbie sayacını sıfırla (ses/mod düzeltmesi)
             self.bot_thread = BotRunnerThread(self.config, self.log, self.update_status)
             self.bot_thread.start()
 

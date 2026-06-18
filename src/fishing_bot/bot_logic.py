@@ -75,6 +75,12 @@ class BotLogic:
         self._reaction_delay: float = 0.0       # Bu tıklama için random reaksiyon süresi
         self._fish_entered_safe_at: float = 0.0  # Balık safe zone'a ilk girdiği an
         self._fish_was_inside: bool = False      # Önceki frame'de balık içerde miydi?
+        
+        # Dinamik yem tuşu kaydırması
+        self._bait_slot_offset: int = 0
+        
+        # Karşılaşılan balıkların sayacı (GUI için)
+        self.encountered_fishes: dict[str, int] = {}
 
     def start(self) -> None:
         """Döngüyü başlatır."""
@@ -140,11 +146,10 @@ class BotLogic:
                         status_msg = "Minik Balik yeme takildi"
 
                 if not bait_clicked:
-                    # 200 kullanimda bir tusu degistir (1 -> 2 -> 3 -> 4 vb.)
+                    # Yem bittiğinde tetiklenen offset ile tuşu belirle (1 -> 2 -> 3 -> 4 -> 1)
                     try:
                         base_key = int(self._cfg.key_bait)
-                        offset = (self.total_casts // 200) % 4
-                        current_bait_key = str(base_key + offset)
+                        current_bait_key = str(base_key + self._bait_slot_offset)
                     except ValueError:
                         current_bait_key = self._cfg.key_bait
 
@@ -197,6 +202,35 @@ class BotLogic:
 
         elif self.state == BotState.WAITING:
             status_msg = f"Balik bekleniyor... ({int(elapsed)}s)"
+            
+            # Chat okuyucuyu başlat/güncelle (İptal sistemi ve Yem kontrolü için gerekli)
+            if not hasattr(self, '_chat_reader') or self._chat_reader is None:
+                from fishing_bot.chat_reader import ChatReader
+                self._chat_reader = ChatReader({
+                    'top': self._cfg.chat_region_y,
+                    'left': self._cfg.chat_region_x,
+                    'width': self._cfg.chat_region_w,
+                    'height': self._cfg.chat_region_h
+                })
+            else:
+                self._chat_reader.update_region(
+                    self._cfg.chat_region_x, self._cfg.chat_region_y,
+                    self._cfg.chat_region_w, self._cfg.chat_region_h
+                )
+                
+            # ── YEM BİTTİ KONTROLÜ (Oltayı attıktan ~1.2 sn sonra SADECE 1 KERE chat'e bak) ──
+            if elapsed > 1.2 and not getattr(self, "_checked_bait_error", False):
+                self._checked_bait_error = True
+                if self._cfg.chat_region_w > 0 and self._cfg.chat_region_h > 0:
+                    raw_chat = self._chat_reader.get_raw_chat()
+                    if raw_chat:
+                        chat_norm = raw_chat.lower().replace('ü', 'u').replace('ö', 'o').replace('ı', 'i').replace('ş', 's').replace('ğ', 'g').replace('ç', 'c').replace('i̇', 'i')
+                        # Oyun "Önce yemi çengele geçir." uyarısı verdiyse yem bitmiştir!
+                        if "once yemi" in chat_norm or "cengele gecir" in chat_norm:
+                            self._bait_slot_offset = (self._bait_slot_offset + 1) % 4
+                            self._transition_to(BotState.PREPARE)
+                            status_msg = f"Yem bitti! Tus degistiriliyor (+{self._bait_slot_offset})"
+                            return False, status_msg
 
             # ── Idle Mouse Hareketi (İnsan sıkılmış gibi) ──
             # Her 3-7 saniyede bir fareyi hafifçe oynat
@@ -236,20 +270,6 @@ class BotLogic:
                 self._hesitation_start = 0.0
                 
                 # ── İPTAL SİSTEMİ (Chat OCR) ──
-                if not hasattr(self, '_chat_reader') or self._chat_reader is None:
-                    from fishing_bot.chat_reader import ChatReader
-                    self._chat_reader = ChatReader({
-                        'top': self._cfg.chat_region_y,
-                        'left': self._cfg.chat_region_x,
-                        'width': self._cfg.chat_region_w,
-                        'height': self._cfg.chat_region_h
-                    })
-                else:
-                    self._chat_reader.update_region(
-                        self._cfg.chat_region_x, self._cfg.chat_region_y,
-                        self._cfg.chat_region_w, self._cfg.chat_region_h
-                    )
-                
                 if self._cfg.use_fish_ocr and self._cfg.ignored_fishes and self._cfg.chat_region_w > 0 and self._cfg.chat_region_h > 0:
                     hooked_fish = None
                     
@@ -259,7 +279,7 @@ class BotLogic:
                         "Dere Alabalığı", "Kadife Balığı", "Kral Yengeci", "Altın Yüzük", "Kaçak Pelerin", 
                         "Ringa Balığı", "Gümüş Balığı", "Şiraz Balığı", "Sudak Balığı", "Altın Sudak", "Altın Sudak Balığı",
                         "Ot Sazanı", "Som Balığı", "Minik Balık", "Saç Boyası", "Alabalık", "Uskumru", 
-                        "Palamut", "Zargana", "Yabbie", "Levrek", "Yayın", "Çopra", "Sazan"
+                        "Palamut", "Zargana", "Yabbie Yengeci", "Levrek", "Yayın Balığı", "Çopra", "Sazan", "Lüfer Balığı"
                     ]
                     
                     # Kullanıcının eklediği özel balıkları ve iptal listesindekileri tanınan kelimelere dahil et
@@ -284,6 +304,8 @@ class BotLogic:
                     # Chat yazısının ekrana düşmesi oyun motorunda gecikebilir
                     for _ in range(5):
                         raw_chat = self._chat_reader.get_raw_chat()
+                        fish_detected_in_chat = False
+                        
                         if raw_chat:
                             lines = raw_chat.split('\n')
                             # En son (en alttaki) mesajlara öncelik ver
@@ -330,16 +352,20 @@ class BotLogic:
                                 
                                 # Tespit edilen balık bizim iptal listemizde var mı kontrol et
                                 if detected_known_fish:
+                                    fish_detected_in_chat = True
+                                    self.encountered_fishes[detected_known_fish] = self.encountered_fishes.get(detected_known_fish, 0) + 1
+                                    
                                     for ignored_fish in self._cfg.ignored_fishes:
                                         # İptal listesindeki balıklarla tam eşleşme arıyoruz
                                         if normalize_tr(ignored_fish) == normalize_tr(detected_known_fish):
                                             hooked_fish = detected_known_fish
                                             break
-                                
-                                if hooked_fish:
-                                    break
+                                    # Herhangi bir balık tespit edildiği an (iptal edilsin veya edilmesin) 
+                                    # chat'in güncellendiğinden eminiz. Diğer satırlara bakmaya gerek yok.
+                                    break 
                         
-                        if hooked_fish:
+                        if fish_detected_in_chat:
+                            # Balık bulundu! Gereksiz yere 5 kere bekleyip botu dondurma.
                             break
                         time.sleep(0.06)  # 60ms bekle ve tekrar oku
                         
@@ -619,7 +645,14 @@ class BotLogic:
 
             # ── Zırh trick kullanıldıysa HEMEN PREPARE'e geç (bekleme YOK) ──
             if getattr(self, "_armor_trick_used", False):
-                self._transition_to(BotState.PREPARE)
+                if self._cfg.use_fatigue_system and time.time() > self._next_fatigue_time:
+                    self._fatigue_duration = random.uniform(
+                        self._cfg.fatigue_duration_min,
+                        self._cfg.fatigue_duration_max
+                    )
+                    self._transition_to(BotState.FATIGUE_BREAK)
+                else:
+                    self._transition_to(BotState.PREPARE)
             else:
                 # Animasyon beklemesi (rastgeleleştirilmiş) — normal akış
                 _postcatch_delay = getattr(self, "_postcatch_target_delay", 0.0)
@@ -639,6 +672,19 @@ class BotLogic:
         elif self.state == BotState.FATIGUE_BREAK:
             remaining = self._fatigue_duration - elapsed
             status_msg = f"Cay Molasi ☕ (Kalan: {int(remaining)}s)"
+            
+            # ── Moladayken Rastgele Fare Hareketleri (Bilgisayar başında vakit geçiriyor gibi) ──
+            if now - getattr(self, "_last_idle_move", 0.0) > random.uniform(2.0, 5.0):
+                self._last_idle_move = now
+                try:
+                    import pyautogui
+                    cur_x, cur_y = pyautogui.position()
+                    jitter_x = cur_x + random.randint(-60, 60)
+                    jitter_y = cur_y + random.randint(-60, 60)
+                    import ctypes
+                    ctypes.windll.user32.SetCursorPos(jitter_x, jitter_y)
+                except Exception:
+                    pass
             
             if remaining <= 0:
                 self._next_fatigue_time = time.time() + random.uniform(
@@ -706,3 +752,4 @@ class BotLogic:
             self._cast_pressed = False
         elif new_state == BotState.WAITING:
             self._consecutive_circle_count = 0
+            self._checked_bait_error = False

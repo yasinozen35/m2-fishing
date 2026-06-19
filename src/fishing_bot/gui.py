@@ -13,7 +13,7 @@ import customtkinter as ctk
 import pyautogui
 
 from fishing_bot.config import Config
-from fishing_bot.bot_logic import BotLogic
+from fishing_bot.bot_logic import BotLogic, BotState
 from fishing_bot.screen_capture import ScreenCapture
 from fishing_bot.detector import Detector
 from fishing_bot.clicker import HumanClicker
@@ -722,17 +722,20 @@ class FishingBotGUI(ctk.CTk):
             c.human.use_fps_jitter = False
             
         elif preset_name == "Adrenalin":
-            c.human.reaction_min = 0.05
-            c.human.reaction_max = 0.10
-            c.human.click_cooldown = 0.25
-            c.human.horizontal_jitter_px = 1
-            c.human.prediction_lead_factor = 0.10
-            c.human.prediction_max_lead_px = 15
-            c.human.prediction_speed_threshold = 100.0
-            c.human.prediction_noise_sigma = 0.01
-            c.human.click_inner_margin = 0.95
-            c.human.intentional_miss_rate = 0.0
-            c.human.fast_fish_miss_rate = 0.0
+            # Anti-cheat güvenli Adrenalin: Güvenli ile Terminatör arası
+            # Organic targeting (mouse bezier ile hareket eder, ışınlanma YOK)
+            # Prediction noise, intentional miss ve dynamic rhythm KORUNUYOR
+            c.human.reaction_min = 0.10
+            c.human.reaction_max = 0.16
+            c.human.click_cooldown = 0.28
+            c.human.horizontal_jitter_px = 2
+            c.human.prediction_lead_factor = 0.15
+            c.human.prediction_max_lead_px = 18
+            c.human.prediction_speed_threshold = 80.0
+            c.human.prediction_noise_sigma = 0.05
+            c.human.click_inner_margin = 0.92
+            c.human.intentional_miss_rate = 0.03
+            c.human.fast_fish_miss_rate = 0.05
             c.human.targeting_mode = "organic"
             
             c.human.use_micro_movement = True
@@ -769,8 +772,8 @@ class FishingBotGUI(ctk.CTk):
             c.human.prediction_speed_threshold = 40.0
             c.human.prediction_noise_sigma = 0.15
             c.human.click_inner_margin = 0.85
-            c.human.intentional_miss_rate = 0.0
-            c.human.fast_fish_miss_rate = 0.0
+            c.human.intentional_miss_rate = 0.02   # %2 — doğal kaçırmaların üstüne ufak ek
+            c.human.fast_fish_miss_rate = 0.05     # %5 — hızlı balıklarda zaten çoğu kaçıyor
             c.human.targeting_mode = "organic"
             
             c.human.use_micro_movement = True
@@ -941,13 +944,14 @@ class FishingBotGUI(ctk.CTk):
         self.lbl_catches.configure(text=f"Tutan Balık: {catches}")
         self.lbl_casts.configure(text=f"Atış Sayısı: {casts}")
         
-        # Balık istatistiklerini güncelle ve Terminatör oto-tetikleme
+        # Balık istatistiklerini güncelle ve Yabbie→Adrenalin oto-tetikleme
         self._last_yabbie_count = getattr(self, "_last_yabbie_count", 0)
-        self._adrenalin_end_time = getattr(self, "_adrenalin_end_time", 0.0)
+        self._yabbie_adrenalin_active = getattr(self, "_yabbie_adrenalin_active", False)
         self._previous_preset = getattr(self, "_previous_preset", None)
 
         if self.bot_thread and hasattr(self.bot_thread, 'bot_logic') and self.bot_thread.bot_logic:
-            encountered = self.bot_thread.bot_logic.encountered_fishes
+            bot = self.bot_thread.bot_logic
+            encountered = bot.encountered_fishes
             if encountered:
                 total_fishes = sum(encountered.values())
                 self.fish_counts_textbox.configure(state="normal")
@@ -957,7 +961,9 @@ class FishingBotGUI(ctk.CTk):
                     self.fish_counts_textbox.insert("end", f"{f}: {count}\n")
                 self.fish_counts_textbox.configure(state="disabled")
                 
-                # Otomatik Terminatör Modu (Yabbie Yengeci için)
+                # ── Otomatik Adrenalin Modu (Yabbie Yengeci için) ──
+                # Yabbie tespit edildiğinde Güvenli → Adrenalin'e geçer.
+                # Minigame bitince (POST_CATCH/PREPARE) Güvenli'ye döner.
                 current_yabbie = encountered.get("Yabbie Yengeci", 0)
                 if current_yabbie > self._last_yabbie_count:
                     self._last_yabbie_count = current_yabbie
@@ -967,16 +973,13 @@ class FishingBotGUI(ctk.CTk):
                         import os
                         import ctypes
                         import threading
-                        # Ses dosyasının tam yolunu bul (script'in çalıştığı yere göre src/fishing_bot/music/submarine-sonar.mp3)
                         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
                         sound_path = os.path.join(base_dir, "src", "fishing_bot", "music", "submarine-sonar.mp3")
                         
                         if os.path.exists(sound_path):
                             def _play_yabbie_sound():
                                 alias = "yabbie_sound"
-                                # Eğer zaten çalıyorsa durdur ve kapat
                                 ctypes.windll.winmm.mciSendStringW(f'close {alias}', None, 0, None)
-                                # Yeni dosyayı aç ve çal (Windows'un native MP3 oynatıcısı, pygame vb. gerektirmez)
                                 ctypes.windll.winmm.mciSendStringW(f'open "{sound_path}" alias {alias}', None, 0, None)
                                 ctypes.windll.winmm.mciSendStringW(f'play {alias}', None, 0, None)
                             
@@ -987,20 +990,25 @@ class FishingBotGUI(ctk.CTk):
                         self.log(f"Ses çalınırken hata: {e}")
                     # -----------------------
 
-                    if self.seg_modes_top.get() != "Terminatör":
+                    # Terminatör modundaysa dokunma (kullanıcı bilerek seçmiş)
+                    if self.seg_modes_top.get() != "Terminatör" and not self._yabbie_adrenalin_active:
                         self._previous_preset = self.seg_modes_top.get()
-                        self.log("Yabbie tespit edildi! 15 saniyeligine Terminatör moduna geciliyor...")
-                        self.seg_modes_top.set("Terminatör")
-                        self._apply_preset("Terminatör", is_auto=True)
-                        self._adrenalin_end_time = time.time() + 15.0
+                        self.log("🦀 Yabbie tespit edildi! Adrenalin moduna geçiliyor (minigame bitene kadar)...")
+                        self.seg_modes_top.set("Adrenalin")
+                        self._apply_preset("Adrenalin", is_auto=True)
+                        self._yabbie_adrenalin_active = True
             
-            # Terminatör süresi doldu mu kontrolü
-            if self._adrenalin_end_time > 0 and time.time() > self._adrenalin_end_time:
-                self._adrenalin_end_time = 0.0
-                if self._previous_preset and self.seg_modes_top.get() == "Terminatör":
-                    self.log(f"Terminatör suresi doldu. Eski moda ({self._previous_preset}) donuluyor.")
-                    self.seg_modes_top.set(self._previous_preset)
-                    self._apply_preset(self._previous_preset, is_auto=True)
+            # ── Minigame bitti mi kontrolü: Adrenalin → Güvenli'ye dön ──
+            # Bot MINIGAME'den çıktıysa (POST_CATCH, PREPARE, WAITING, vb.) geri dön
+            if self._yabbie_adrenalin_active:
+                bot_state = bot.state
+                if bot_state not in (BotState.MINIGAME,):
+                    self._yabbie_adrenalin_active = False
+                    previous = self._previous_preset or "Güvenli"
+                    if self.seg_modes_top.get() == "Adrenalin":
+                        self.log(f"✅ Yabbie minigame bitti. {previous} moduna dönülüyor.")
+                        self.seg_modes_top.set(previous)
+                        self._apply_preset(previous, is_auto=True)
 
     def toggle_bot(self):
         if self.bot_thread and self.bot_thread.running:
@@ -1028,6 +1036,7 @@ class FishingBotGUI(ctk.CTk):
             self.btn_calibrate.configure(state="disabled")
             
             self._last_yabbie_count = 0  # Yeni bot başlatıldığında yabbie sayacını sıfırla (ses/mod düzeltmesi)
+            self._yabbie_adrenalin_active = False  # Adrenalin mod flag'ini sıfırla
             self.bot_thread = BotRunnerThread(self.config, self.log, self.update_status)
             self.bot_thread.start()
 

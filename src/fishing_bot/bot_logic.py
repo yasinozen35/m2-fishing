@@ -302,7 +302,8 @@ class BotLogic:
                         return text
                     
                     # Chat yazısının ekrana düşmesi oyun motorunda gecikebilir
-                    for _ in range(5):
+                    # Düşük sistemlerde (i3 vb.) OCR çok ağır olduğu için deneme sayısını 3'e düşürüp bekleme süresini uzatıyoruz.
+                    for _ in range(3):
                         raw_chat = self._chat_reader.get_raw_chat()
                         fish_detected_in_chat = False
                         
@@ -366,9 +367,10 @@ class BotLogic:
                                     break 
                         
                         if fish_detected_in_chat:
-                            # Balık bulundu! Gereksiz yere 5 kere bekleyip botu dondurma.
+                            # Balık bulundu! Gereksiz yere bekleyip botu dondurma.
                             break
-                        time.sleep(0.06)  # 60ms bekle ve tekrar oku
+                        time.sleep(0.12)  # Düşük PC'ler için OCR arası dinlenme süresi artırıldı
+                        
                         
                     if hooked_fish:
                         # İnsan okuma ve tepki verme süresi (Kullanıcı isteğiyle 1 sn yapıldı)

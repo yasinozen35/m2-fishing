@@ -59,13 +59,13 @@ class CaptureConfig:
 @dataclass
 class CircleDetectConfig:
     """Hough Circle Transform parametreleri."""
-    dp: float = 1.2                # Çözünürlük oranı (1 = orijinal, 2 = yarı)
+    dp: float = 1.5                # Çözünürlük oranı (1 = orijinal, 2 = yarı). Performans için 1.5 yapıldı.
     min_dist: int = 100            # Daireler arası minimum mesafe
     param1: int = 100              # Canny edge üst eşiği
     param2: int = 40               # Merkez tespit eşiği (düşük = daha hassas)
     min_radius: int = 50           # Minimum daire yarıçapı (px)
     max_radius: int = 300          # Maksimum daire yarıçapı (px)
-    cache_ttl_frames: int = 40     # Daire cache süresi (kare sayısı). Uzun: tespit dalgalanmasını bastırmak için.
+    cache_ttl_frames: int = 60     # Daire cache süresi (kare sayısı). Uzun: performans artışı için.
     inner_margin: float = 0.95     # Daire iç bölge oranı (Daha geniş alan toleransı)
 
 
@@ -241,8 +241,8 @@ class Config:
     # Debug modu: True ise overlay penceresi açılır.
     debug_mode: bool = True
 
-    # FPS sınırı (ana döngü).
-    target_fps: int = 60
+    # FPS sınırı (ana döngü). Düşük sistemler için 30'a düşürüldü.
+    target_fps: int = 30
 
     def __post_init__(self):
         """Uygulama başlatıldığında kalibrasyon dosyasını otomatik yükler."""

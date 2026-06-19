@@ -270,7 +270,7 @@ class BotLogic:
                 self._hesitation_start = 0.0
                 
                 # ── İPTAL SİSTEMİ (Chat OCR) ──
-                if self._cfg.use_fish_ocr and self._cfg.ignored_fishes and self._cfg.chat_region_w > 0 and self._cfg.chat_region_h > 0:
+                if self._cfg.use_fish_ocr and self._cfg.chat_region_w > 0 and self._cfg.chat_region_h > 0:
                     hooked_fish = None
                     
                     KNOWN_FISHES = [
@@ -353,6 +353,7 @@ class BotLogic:
                                 # Tespit edilen balık bizim iptal listemizde var mı kontrol et
                                 if detected_known_fish:
                                     fish_detected_in_chat = True
+                                    self._current_hooked_fish = detected_known_fish
                                     self.encountered_fishes[detected_known_fish] = self.encountered_fishes.get(detected_known_fish, 0) + 1
                                     
                                     for ignored_fish in self._cfg.ignored_fishes:
@@ -390,6 +391,20 @@ class BotLogic:
                 self._transition_to(BotState.POST_CATCH)
 
         elif self.state == BotState.MINIGAME:
+            if getattr(self, "_current_hooked_fish", None) == "Yabbie Yengeci" and getattr(self._cfg, "leave_to_me_yabbie", False):
+                status_msg = "Bana Birak: Yabbie Yengeci Bekleniyor..."
+                if detection.circle is None:
+                    missing_count = getattr(self, "_circle_missing_count", 0) + 1
+                    self._circle_missing_count = missing_count
+                    if missing_count >= 5:
+                        if detector is not None:
+                            detector.invalidate_circle_cache()
+                        self._circle_missing_count = 0
+                        self._transition_to(BotState.POST_CATCH)
+                else:
+                    self._circle_missing_count = 0
+                return False, status_msg
+
             status_msg = f"MINIGAME: {self._click_count_in_minigame}/3 Tik"
 
             # Daire kaybolduysa hemen çıkma — 5 frame üst üste yoksa gerçekten bitti
@@ -704,6 +719,9 @@ class BotLogic:
         """Durum değiştirir ve zamanlayıcıyı sıfırlar."""
         self.state = new_state
         self._state_start_time = time.time()
+        
+        if new_state in (BotState.IDLE, BotState.WAITING):
+            self._current_hooked_fish = None
 
         if new_state == BotState.MINIGAME:
             self._last_minigame_end_time = 0.0  # Watchdog sıfırla

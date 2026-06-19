@@ -180,6 +180,7 @@ class AutoBotConfig:
     armor_y: int = 0
     use_armor_trick: bool = False # Zırh çıkar-tak aktif mi?
     auto_open_fishes: bool = True # Yakalanan balıklar otomatik açılsın mı?
+    leave_to_me_yabbie: bool = False # Bana bırak (Yabbie Yengeci)
     
     # ── Chat Okuma & İptal ──
     ignored_fishes: list = field(default_factory=list) # İptal edilecek balıklar listesi
@@ -261,6 +262,7 @@ class Config:
             "armor_y": self.autobot.armor_y,
             "trash_drop_y": self.autobot.trash_drop_y,
             "auto_open_fishes": self.autobot.auto_open_fishes,
+            "leave_to_me_yabbie": self.autobot.leave_to_me_yabbie,
             "auto_mode_min_mins": self.autobot.auto_mode_min_mins,
             "auto_mode_max_mins": self.autobot.auto_mode_max_mins,
             "auto_weight_terminator": self.autobot.auto_weight_terminator,
@@ -337,6 +339,7 @@ class Config:
                     self.autobot.trash_drop_x = data.get("trash_drop_x", self.autobot.trash_drop_x)
                     self.autobot.trash_drop_y = data.get("trash_drop_y", self.autobot.trash_drop_y)
                     self.autobot.auto_open_fishes = data.get("auto_open_fishes", self.autobot.auto_open_fishes)
+                    self.autobot.leave_to_me_yabbie = data.get("leave_to_me_yabbie", self.autobot.leave_to_me_yabbie)
                     self.autobot.auto_mode_min_mins = data.get("auto_mode_min_mins", self.autobot.auto_mode_min_mins)
                     self.autobot.auto_mode_max_mins = data.get("auto_mode_max_mins", self.autobot.auto_mode_max_mins)
                     self.autobot.auto_weight_terminator = data.get("auto_weight_terminator", self.autobot.auto_weight_terminator)

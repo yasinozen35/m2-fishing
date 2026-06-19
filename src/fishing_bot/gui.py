@@ -206,6 +206,20 @@ class FishingBotGUI(ctk.CTk):
         tab = ctk.CTkScrollableFrame(parent_tab)
         tab.pack(fill="both", expand=True)
         
+        # Bana bırak ayarı
+        f_leave = ctk.CTkFrame(tab)
+        f_leave.pack(fill="x", padx=10, pady=5)
+        self.chk_leave_to_me = ctk.CTkCheckBox(
+            f_leave, 
+            text='Bana bırak (Yabbie Yengeci geldiğinde bot duraklar)',
+            command=self._on_extras_toggle
+        )
+        self.chk_leave_to_me.pack(side="left", padx=10, pady=5)
+        if self.config.autobot.leave_to_me_yabbie:
+            self.chk_leave_to_me.select()
+        else:
+            self.chk_leave_to_me.deselect()
+        
         ctk.CTkLabel(tab, text="Klavye Tuşları", font=ctk.CTkFont(weight="bold")).pack(pady=(10, 5))
         
         f1 = ctk.CTkFrame(tab)
@@ -674,50 +688,14 @@ class FishingBotGUI(ctk.CTk):
     # ── Metodlar ──
     
     def _auto_mode_loop(self):
-        if self.seg_modes_top.get() != "Auto Mod":
-            self._auto_mode_running = False
-            return
-            
-        c = self.config
-        import random
-        # Ağırlıklara göre mod seçimi
-        modes = ["Terminatör", "E-Sporcu", "Güvenli"]
-        weights = [c.autobot.auto_weight_terminator, c.autobot.auto_weight_esports, c.autobot.auto_weight_safe]
-        
-        # Aynı modun üst üste seçilmesini engelle ki kullanıcı değişimi fark etsin
-        last_mode = getattr(self, "_last_auto_mode", None)
-        if last_mode in modes:
-            idx = modes.index(last_mode)
-            weights[idx] = 0
-            
-        if sum(weights) <= 0:
-            weights = [10, 40, 50]
-            if last_mode in modes:
-                weights[modes.index(last_mode)] = 0
-            
-        chosen = random.choices(modes, weights=weights)[0]
-        self._last_auto_mode = chosen
-        
-        # Seçili moda geç
-        self.log(f"[Auto Mod] Profil arka planda degisti: {chosen}")
-        self._apply_preset(chosen, is_auto=True)
-        
-        # Sonraki çalışma zamanını hesapla
-        min_ms = c.autobot.auto_mode_min_mins * 60 * 1000
-        max_ms = c.autobot.auto_mode_max_mins * 60 * 1000
-        if max_ms < min_ms:
-            max_ms = min_ms
-        next_interval_ms = random.randint(min_ms, max_ms)
-        self.after(next_interval_ms, self._auto_mode_loop)
+        pass
 
     def _apply_preset(self, preset_name, is_auto=False):
         c = self.config
         
         if preset_name == "Auto Mod":
-            if not getattr(self, "_auto_mode_running", False):
-                self._auto_mode_running = True
-                self.lbl_auto_status.configure(text="Auto Mod: Başlatılıyor...")
-                self._auto_mode_loop()
+            self.log("[Auto Mod] Güvenli mod devrede, Yabbie Yengeci bekleniyor...")
+            self._apply_preset("Güvenli", is_auto=True)
             return
             
         if not is_auto:
@@ -889,6 +867,7 @@ class FishingBotGUI(ctk.CTk):
         c.autobot.use_fatigue_system = self.switch_fatigue.get() == 1
         c.autobot.auto_drop_trash = self.switch_trash.get() == 1
         c.autobot.auto_open_fishes = self.switch_open_fish.get() == 1
+        c.autobot.leave_to_me_yabbie = self.chk_leave_to_me.get() == 1
         c.human.use_gaussian_jitter = self.switch_gauss.get() == 1
         c.human.use_micro_movement = self.switch_micro.get() == 1
         c.human.use_dynamic_rhythm = self.switch_dynrhythm.get() == 1
@@ -962,7 +941,7 @@ class FishingBotGUI(ctk.CTk):
         self.lbl_catches.configure(text=f"Tutan Balık: {catches}")
         self.lbl_casts.configure(text=f"Atış Sayısı: {casts}")
         
-        # Balık istatistiklerini güncelle ve Adrenalin (Focus) oto-tetikleme
+        # Balık istatistiklerini güncelle ve Terminatör oto-tetikleme
         self._last_yabbie_count = getattr(self, "_last_yabbie_count", 0)
         self._adrenalin_end_time = getattr(self, "_adrenalin_end_time", 0.0)
         self._previous_preset = getattr(self, "_previous_preset", None)
@@ -978,7 +957,7 @@ class FishingBotGUI(ctk.CTk):
                     self.fish_counts_textbox.insert("end", f"{f}: {count}\n")
                 self.fish_counts_textbox.configure(state="disabled")
                 
-                # Otomatik Adrenalin Modu (Yabbie Yengeci için)
+                # Otomatik Terminatör Modu (Yabbie Yengeci için)
                 current_yabbie = encountered.get("Yabbie Yengeci", 0)
                 if current_yabbie > self._last_yabbie_count:
                     self._last_yabbie_count = current_yabbie
@@ -1008,18 +987,18 @@ class FishingBotGUI(ctk.CTk):
                         self.log(f"Ses çalınırken hata: {e}")
                     # -----------------------
 
-                    if self.seg_modes_top.get() != "Adrenalin":
+                    if self.seg_modes_top.get() != "Terminatör":
                         self._previous_preset = self.seg_modes_top.get()
-                        self.log("Yabbie tespit edildi! 15 saniyeligine Adrenalin (Focus) moduna geciliyor...")
-                        self.seg_modes_top.set("Adrenalin")
-                        self._apply_preset("Adrenalin", is_auto=True)
+                        self.log("Yabbie tespit edildi! 15 saniyeligine Terminatör moduna geciliyor...")
+                        self.seg_modes_top.set("Terminatör")
+                        self._apply_preset("Terminatör", is_auto=True)
                         self._adrenalin_end_time = time.time() + 15.0
             
-            # Adrenalin süresi doldu mu kontrolü
+            # Terminatör süresi doldu mu kontrolü
             if self._adrenalin_end_time > 0 and time.time() > self._adrenalin_end_time:
                 self._adrenalin_end_time = 0.0
-                if self._previous_preset and self.seg_modes_top.get() == "Adrenalin":
-                    self.log(f"Adrenalin suresi doldu. Eski moda ({self._previous_preset}) donuluyor.")
+                if self._previous_preset and self.seg_modes_top.get() == "Terminatör":
+                    self.log(f"Terminatör suresi doldu. Eski moda ({self._previous_preset}) donuluyor.")
                     self.seg_modes_top.set(self._previous_preset)
                     self._apply_preset(self._previous_preset, is_auto=True)
 

@@ -703,12 +703,12 @@ class FishingBotGUI(ctk.CTk):
             self.lbl_auto_status.configure(text="")
             
         if preset_name == "Terminatör":
-            c.human.reaction_min = 0.08
-            c.human.reaction_max = 0.13
-            c.human.click_cooldown = 0.30
+            c.human.reaction_min = 0.01
+            c.human.reaction_max = 0.04
+            c.human.click_cooldown = 0.05
             c.human.horizontal_jitter_px = 0
-            c.human.prediction_lead_factor = 0.20
-            c.human.prediction_max_lead_px = 15
+            c.human.prediction_lead_factor = 0.25
+            c.human.prediction_max_lead_px = 25
             c.human.prediction_speed_threshold = 150.0
             c.human.prediction_noise_sigma = 0.0
             c.human.click_inner_margin = 0.95
@@ -722,20 +722,18 @@ class FishingBotGUI(ctk.CTk):
             c.human.use_fps_jitter = False
             
         elif preset_name == "Adrenalin":
-            # Anti-cheat güvenli Adrenalin: Güvenli ile Terminatör arası
-            # Organic targeting (mouse bezier ile hareket eder, ışınlanma YOK)
-            # Prediction noise, intentional miss ve dynamic rhythm KORUNUYOR
-            c.human.reaction_min = 0.10
-            c.human.reaction_max = 0.16
-            c.human.click_cooldown = 0.28
-            c.human.horizontal_jitter_px = 2
-            c.human.prediction_lead_factor = 0.15
-            c.human.prediction_max_lead_px = 18
-            c.human.prediction_speed_threshold = 80.0
-            c.human.prediction_noise_sigma = 0.05
-            c.human.click_inner_margin = 0.92
-            c.human.intentional_miss_rate = 0.03
-            c.human.fast_fish_miss_rate = 0.05
+            # Anti-cheat güvenli ama Yabbie yakalayabilecek Adrenalin
+            c.human.reaction_min = 0.02
+            c.human.reaction_max = 0.06
+            c.human.click_cooldown = 0.08
+            c.human.horizontal_jitter_px = 1
+            c.human.prediction_lead_factor = 0.30
+            c.human.prediction_max_lead_px = 30
+            c.human.prediction_speed_threshold = 60.0
+            c.human.prediction_noise_sigma = 0.02
+            c.human.click_inner_margin = 0.95
+            c.human.intentional_miss_rate = 0.0
+            c.human.fast_fish_miss_rate = 0.0
             c.human.targeting_mode = "organic"
             
             c.human.use_micro_movement = True

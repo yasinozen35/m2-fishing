@@ -10,8 +10,13 @@ import random
 import sys
 import time
 import math
+import threading
+from contextlib import nullcontext
 
 import pyautogui
+
+# Global fare kilidi (Çoklu pencere desteği için)
+GLOBAL_MOUSE_LOCK = threading.Lock()
 
 # Windows'ta PyDirectInput bile bazen oyun içi kilitlenmelere ve donmalara yol açıyor.
 # Bu yüzden en düşük seviyeli donanım API'sini (Ctypes Win32) kendimiz yazıyoruz!
@@ -169,6 +174,54 @@ class HumanClicker:
         self._capture = capture_config
         self._last_click_time: float = 0.0
 
+    def focus_window(self):
+        """
+        Bu botun penceresini ön plana (foreground) getirir.
+        Özellikle çoklu pencerede (multi-client) klavye tuşlarının (Yem/Space)
+        doğru pencereye gitmesi için tuş basımından önce çağrılmalıdır.
+        """
+        if sys.platform != "win32":
+            return
+        try:
+            import ctypes
+            # Capture bölgesinin tam ortasındaki koordinatları al
+            cx = self._capture.left + self._capture.width // 2
+            cy = self._capture.top + self._capture.height // 2
+            
+            class POINT(ctypes.Structure):
+                _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+                
+            pt = POINT(int(cx), int(cy))
+            hwnd = ctypes.windll.user32.WindowFromPoint(pt)
+            
+            # Alt component (child) yerine ana pencereyi (GA_ROOT = 2) al
+            hwnd = ctypes.windll.user32.GetAncestor(hwnd, 2)
+            
+            if hwnd:
+                current_hwnd = ctypes.windll.user32.GetForegroundWindow()
+                if current_hwnd != hwnd:
+                    # Windows 10/11 SetForegroundWindow kısıtlamalarını aşmak için Thread Attach yöntemi
+                    fg_thread = ctypes.windll.user32.GetWindowThreadProcessId(current_hwnd, None)
+                    my_thread = ctypes.windll.kernel32.GetCurrentThreadId()
+                    
+                    if fg_thread != my_thread and fg_thread != 0:
+                        ctypes.windll.user32.AttachThreadInput(my_thread, fg_thread, True)
+                        ctypes.windll.user32.SetForegroundWindow(hwnd)
+                        ctypes.windll.user32.BringWindowToTop(hwnd)
+                        ctypes.windll.user32.AttachThreadInput(my_thread, fg_thread, False)
+                    else:
+                        ctypes.windll.user32.SetForegroundWindow(hwnd)
+                        ctypes.windll.user32.BringWindowToTop(hwnd)
+                    time.sleep(0.02)  # Pencerenin aktifleşmesi için kısa bir an bekle
+        except Exception:
+            pass
+
+    def _mouse_lock(self):
+        """Ayarlara göre gerçek lock veya boş context döndürür."""
+        if getattr(self._human, 'use_mouse_lock', True):
+            return GLOBAL_MOUSE_LOCK
+        return nullcontext()
+
     def click_at(self, local_x: int, local_y: int) -> bool:
         """
         Minigame için optimize EDİLMEMİŞ tıklama (envanter/kalibrasyon).
@@ -230,88 +283,89 @@ class HumanClicker:
 
         # ── 3. Mikro-hareketli tıklama (Anti-Cheat) ──
         # İnsan 20px için bile ışınlanmaz — 2-4 adımda varır (8-20ms)
-        try:
-            import pyautogui
-            import pydirectinput
-
-            if duration > 0.0:
-                # ── ORGANİK MOD: Hareketi tahmine göre zamana yay ──
-                cur_x, cur_y = pyautogui.position()
-                dist = math.hypot(final_x - cur_x, final_y - cur_y)
-                if dist <= 3:
-                    ctypes.windll.user32.SetCursorPos(int(final_x), int(final_y))
+        with self._mouse_lock():
+            try:
+                import pyautogui
+                import pydirectinput
+    
+                if duration > 0.0:
+                    # ── ORGANİK MOD: Hareketi tahmine göre zamana yay ──
+                    cur_x, cur_y = pyautogui.position()
+                    dist = math.hypot(final_x - cur_x, final_y - cur_y)
+                    if dist <= 3:
+                        ctypes.windll.user32.SetCursorPos(int(final_x), int(final_y))
+                    else:
+                        # Tıklama gecikmesini (~20ms) düşerek sadece hareket süresini bul
+                        move_duration = max(0.01, duration - 0.02)
+                        step_time = 0.015  # 15ms'de bir güncelle
+                        steps = max(3, int(move_duration / step_time))
+                        sleep_per_step = move_duration / steps
+                        
+                        for i in range(1, steps + 1):
+                            t = i / steps
+                            mx = int(cur_x + (final_x - cur_x) * t)
+                            my = int(cur_y + (final_y - cur_y) * t)
+                            ctypes.windll.user32.SetCursorPos(mx, my)
+                            time.sleep(sleep_per_step)
+                elif self._human.use_micro_movement:
+                    cur_x, cur_y = pyautogui.position()
+                    dist = math.hypot(final_x - cur_x, final_y - cur_y)
+                    if dist > 3:
+                        steps = self._human.micro_movement_steps
+                        for i in range(1, steps + 1):
+                            t = i / steps
+                            mx = int(cur_x + (final_x - cur_x) * t)
+                            my = int(cur_y + (final_y - cur_y) * t)
+                            ctypes.windll.user32.SetCursorPos(mx, my)
+                            time.sleep(random.uniform(0.002, 0.005))
+                    else:
+                        ctypes.windll.user32.SetCursorPos(int(final_x), int(final_y))
                 else:
-                    # Tıklama gecikmesini (~20ms) düşerek sadece hareket süresini bul
-                    move_duration = max(0.01, duration - 0.02)
-                    step_time = 0.015  # 15ms'de bir güncelle
-                    steps = max(3, int(move_duration / step_time))
-                    sleep_per_step = move_duration / steps
-                    
-                    for i in range(1, steps + 1):
-                        t = i / steps
-                        mx = int(cur_x + (final_x - cur_x) * t)
-                        my = int(cur_y + (final_y - cur_y) * t)
-                        ctypes.windll.user32.SetCursorPos(mx, my)
-                        time.sleep(sleep_per_step)
-            elif self._human.use_micro_movement:
-                cur_x, cur_y = pyautogui.position()
-                dist = math.hypot(final_x - cur_x, final_y - cur_y)
-                if dist > 3:
-                    steps = self._human.micro_movement_steps
-                    for i in range(1, steps + 1):
-                        t = i / steps
-                        mx = int(cur_x + (final_x - cur_x) * t)
-                        my = int(cur_y + (final_y - cur_y) * t)
-                        ctypes.windll.user32.SetCursorPos(mx, my)
-                        time.sleep(random.uniform(0.002, 0.005))
+                    pydirectinput.moveTo(int(final_x), int(final_y))
+    
+                # OS'nin event'i işlemesi için mikro bekleme
+                time.sleep(0.004)
+                pydirectinput.mouseDown()
+                time.sleep(random.uniform(0.015, 0.030))
+                pydirectinput.mouseUp()
+            except Exception:
+                # Fallback: Win32 API
+                if duration > 0.0:
+                    import pyautogui as _pg
+                    cur_x, cur_y = _pg.position()
+                    dist = math.hypot(final_x - cur_x, final_y - cur_y)
+                    if dist > 3:
+                        move_duration = max(0.01, duration - 0.02)
+                        steps = max(3, int(move_duration / 0.015))
+                        sleep_per_step = move_duration / steps
+                        for i in range(1, steps + 1):
+                            t = i / steps
+                            mx = int(cur_x + (final_x - cur_x) * t)
+                            my = int(cur_y + (final_y - cur_y) * t)
+                            ctypes.windll.user32.SetCursorPos(mx, my)
+                            time.sleep(sleep_per_step)
+                    else:
+                        ctypes.windll.user32.SetCursorPos(int(final_x), int(final_y))
+                elif self._human.use_micro_movement:
+                    import pyautogui as _pg
+                    cur_x, cur_y = _pg.position()
+                    dist = math.hypot(final_x - cur_x, final_y - cur_y)
+                    if dist > 3:
+                        steps = self._human.micro_movement_steps
+                        for i in range(1, steps + 1):
+                            t = i / steps
+                            mx = int(cur_x + (final_x - cur_x) * t)
+                            my = int(cur_y + (final_y - cur_y) * t)
+                            ctypes.windll.user32.SetCursorPos(mx, my)
+                            time.sleep(random.uniform(0.002, 0.005))
+                    else:
+                        ctypes.windll.user32.SetCursorPos(int(final_x), int(final_y))
                 else:
                     ctypes.windll.user32.SetCursorPos(int(final_x), int(final_y))
-            else:
-                pydirectinput.moveTo(int(final_x), int(final_y))
-
-            # OS'nin event'i işlemesi için mikro bekleme
-            time.sleep(0.004)
-            pydirectinput.mouseDown()
-            time.sleep(random.uniform(0.015, 0.030))
-            pydirectinput.mouseUp()
-        except Exception:
-            # Fallback: Win32 API
-            if duration > 0.0:
-                import pyautogui as _pg
-                cur_x, cur_y = _pg.position()
-                dist = math.hypot(final_x - cur_x, final_y - cur_y)
-                if dist > 3:
-                    move_duration = max(0.01, duration - 0.02)
-                    steps = max(3, int(move_duration / 0.015))
-                    sleep_per_step = move_duration / steps
-                    for i in range(1, steps + 1):
-                        t = i / steps
-                        mx = int(cur_x + (final_x - cur_x) * t)
-                        my = int(cur_y + (final_y - cur_y) * t)
-                        ctypes.windll.user32.SetCursorPos(mx, my)
-                        time.sleep(sleep_per_step)
-                else:
-                    ctypes.windll.user32.SetCursorPos(int(final_x), int(final_y))
-            elif self._human.use_micro_movement:
-                import pyautogui as _pg
-                cur_x, cur_y = _pg.position()
-                dist = math.hypot(final_x - cur_x, final_y - cur_y)
-                if dist > 3:
-                    steps = self._human.micro_movement_steps
-                    for i in range(1, steps + 1):
-                        t = i / steps
-                        mx = int(cur_x + (final_x - cur_x) * t)
-                        my = int(cur_y + (final_y - cur_y) * t)
-                        ctypes.windll.user32.SetCursorPos(mx, my)
-                        time.sleep(random.uniform(0.002, 0.005))
-                else:
-                    ctypes.windll.user32.SetCursorPos(int(final_x), int(final_y))
-            else:
-                ctypes.windll.user32.SetCursorPos(int(final_x), int(final_y))
-            time.sleep(0.004)
-            ctypes.windll.user32.mouse_event(0x0002, 0, 0, 0, 0)
-            time.sleep(random.uniform(0.015, 0.030))
-            ctypes.windll.user32.mouse_event(0x0004, 0, 0, 0, 0)
+                time.sleep(0.004)
+                ctypes.windll.user32.mouse_event(0x0002, 0, 0, 0, 0)
+                time.sleep(random.uniform(0.015, 0.030))
+                ctypes.windll.user32.mouse_event(0x0004, 0, 0, 0, 0)
 
         self._last_click_time = time.time()
         return True
@@ -339,9 +393,11 @@ class HumanClicker:
         """
         hold_time = random.uniform(hold_min, hold_max)
 
-        gui_module.keyDown(key)
-        time.sleep(hold_time)
-        gui_module.keyUp(key)
+        with self._mouse_lock():
+            self.focus_window()  # Klavye olayı göndermeden önce pencereyi öne getir!
+            gui_module.keyDown(key)
+            time.sleep(hold_time)
+            gui_module.keyUp(key)
 
     def left_click_screen(self, screen_x: int, screen_y: int) -> None:
         """
@@ -350,19 +406,21 @@ class HumanClicker:
         """
         try:
             import pydirectinput
-            # Mouse'u butonun üstüne SÜRÜKLE (oyun hover'ı algılasın)
-            pydirectinput.moveTo(int(screen_x), int(screen_y))
-            time.sleep(random.uniform(0.06, 0.12))  # Buton aktif olsun
-            pydirectinput.mouseDown()
-            time.sleep(random.uniform(0.08, 0.15))  # Basılı tut
-            pydirectinput.mouseUp()
+            with self._mouse_lock():
+                # Mouse'u butonun üstüne SÜRÜKLE (oyun hover'ı algılasın)
+                pydirectinput.moveTo(int(screen_x), int(screen_y))
+                time.sleep(random.uniform(0.06, 0.12))  # Buton aktif olsun
+                pydirectinput.mouseDown()
+                time.sleep(random.uniform(0.08, 0.15))  # Basılı tut
+                pydirectinput.mouseUp()
         except Exception:
             # Fallback: Win32 API
-            ctypes.windll.user32.SetCursorPos(int(screen_x), int(screen_y))
-            time.sleep(random.uniform(0.06, 0.12))
-            ctypes.windll.user32.mouse_event(0x0002, 0, 0, 0, 0)
-            time.sleep(random.uniform(0.08, 0.15))
-            ctypes.windll.user32.mouse_event(0x0004, 0, 0, 0, 0)
+            with self._mouse_lock():
+                ctypes.windll.user32.SetCursorPos(int(screen_x), int(screen_y))
+                time.sleep(random.uniform(0.06, 0.12))
+                ctypes.windll.user32.mouse_event(0x0002, 0, 0, 0, 0)
+                time.sleep(random.uniform(0.08, 0.15))
+                ctypes.windll.user32.mouse_event(0x0004, 0, 0, 0, 0)
 
     def right_click_at(self, screen_x: int, screen_y: int) -> None:
         """
@@ -370,25 +428,26 @@ class HumanClicker:
         Zırh değişimi ve envanter yönetimi için kullanılır.
         """
         # Mouse'u HIZLI hareket ettir (zırh trick için optimize)
-        try:
-            import pyautogui as _pg
-            cur_x, cur_y = _pg.position()
-            dist = math.hypot(screen_x - cur_x, screen_y - cur_y)
-            steps = 3 if dist > 50 else 1
-            for i in range(1, steps + 1):
-                t = i / steps
-                mx = int(cur_x + (screen_x - cur_x) * t)
-                my = int(cur_y + (screen_y - cur_y) * t)
-                ctypes.windll.user32.SetCursorPos(mx, my)
-                time.sleep(0.004)
-        except Exception:
-            ctypes.windll.user32.SetCursorPos(screen_x, screen_y)
+        with self._mouse_lock():
+            try:
+                import pyautogui as _pg
+                cur_x, cur_y = _pg.position()
+                dist = math.hypot(screen_x - cur_x, screen_y - cur_y)
+                steps = 3 if dist > 50 else 1
+                for i in range(1, steps + 1):
+                    t = i / steps
+                    mx = int(cur_x + (screen_x - cur_x) * t)
+                    my = int(cur_y + (screen_y - cur_y) * t)
+                    ctypes.windll.user32.SetCursorPos(mx, my)
+                    time.sleep(0.004)
+            except Exception:
+                ctypes.windll.user32.SetCursorPos(screen_x, screen_y)
 
-        # Oyunun mouse'u algılaması için
-        time.sleep(random.uniform(0.04, 0.07))
+            # Oyunun mouse'u algılaması için
+            time.sleep(random.uniform(0.04, 0.07))
 
-        # Sağ tıkla
-        gui_module.rightClick() if hasattr(gui_module, 'rightClick') else gui_module.click(button='right')
+            # Sağ tıkla
+            gui_module.rightClick() if hasattr(gui_module, 'rightClick') else gui_module.click(button='right')
 
     def drag_and_drop(self, start_x: int, start_y: int, end_x: int, end_y: int) -> None:
         """
@@ -396,19 +455,20 @@ class HumanClicker:
         (Çöpleri yere atmak için)
         """
         # Başlangıca git (Işınlanma)
-        gui_module.moveTo(start_x, start_y)
-        time.sleep(random.uniform(0.08, 0.15))
+        with self._mouse_lock():
+            gui_module.moveTo(start_x, start_y)
+            time.sleep(random.uniform(0.08, 0.15))
+            
+            # Sol tıkı basılı tut
+            gui_module.mouseDown(button='left')
+            time.sleep(random.uniform(0.1, 0.2)) # Tutma payı
+            
+            # Sürükle (Işınlanma)
+            gui_module.moveTo(end_x, end_y)
+            time.sleep(random.uniform(0.1, 0.2))
+            
+            # Bırak
+            gui_module.mouseUp(button='left')
         
-        # Sol tıkı basılı tut
-        gui_module.mouseDown(button='left')
-        time.sleep(random.uniform(0.1, 0.2)) # Tutma payı
-        
-        # Sürükle (Işınlanma)
-        gui_module.moveTo(end_x, end_y)
-        time.sleep(random.uniform(0.1, 0.2))
-        
-        # Bırak
-        gui_module.mouseUp(button='left')
-        
-        # Onay penceresinin açılması için bekle
+        # Onay penceresinin açılması için bekle (Kilit dışında bekleyebilir)
         time.sleep(random.uniform(0.4, 0.7))

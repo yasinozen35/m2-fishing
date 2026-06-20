@@ -207,21 +207,22 @@ class BotLogic:
             if not hasattr(self, '_chat_reader') or self._chat_reader is None:
                 from fishing_bot.chat_reader import ChatReader
                 self._chat_reader = ChatReader({
-                    'top': self._cfg.chat_region_y,
-                    'left': self._cfg.chat_region_x,
-                    'width': self._cfg.chat_region_w,
-                    'height': self._cfg.chat_region_h
+                    'top': self._capture.config.top + self._cfg.rel_chat_y,
+                    'left': self._capture.config.left + self._cfg.rel_chat_x,
+                    'width': self._cfg.rel_chat_w,
+                    'height': self._cfg.rel_chat_h
                 })
             else:
                 self._chat_reader.update_region(
-                    self._cfg.chat_region_x, self._cfg.chat_region_y,
-                    self._cfg.chat_region_w, self._cfg.chat_region_h
+                    self._capture.config.left + self._cfg.rel_chat_x,
+                    self._capture.config.top + self._cfg.rel_chat_y,
+                    self._cfg.rel_chat_w, self._cfg.rel_chat_h
                 )
                 
             # ── YEM BİTTİ KONTROLÜ (Oltayı attıktan ~1.2 sn sonra SADECE 1 KERE chat'e bak) ──
             if elapsed > 1.2 and not getattr(self, "_checked_bait_error", False):
                 self._checked_bait_error = True
-                if self._cfg.chat_region_w > 0 and self._cfg.chat_region_h > 0:
+                if self._cfg.rel_chat_w > 0 and self._cfg.rel_chat_h > 0:
                     raw_chat = self._chat_reader.get_raw_chat()
                     if raw_chat:
                         chat_norm = raw_chat.lower().replace('ü', 'u').replace('ö', 'o').replace('ı', 'i').replace('ş', 's').replace('ğ', 'g').replace('ç', 'c').replace('i̇', 'i')
@@ -270,7 +271,7 @@ class BotLogic:
                 self._hesitation_start = 0.0
                 
                 # ── İPTAL SİSTEMİ (Chat OCR) ──
-                if self._cfg.use_fish_ocr and self._cfg.chat_region_w > 0 and self._cfg.chat_region_h > 0:
+                if self._cfg.use_fish_ocr and self._cfg.rel_chat_w > 0 and self._cfg.rel_chat_h > 0:
                     hooked_fish = None
                     
                     KNOWN_FISHES = [
@@ -610,8 +611,10 @@ class BotLogic:
                 self._armor_trick_used = False
 
                 # ── ZIRH TRICK: Minigame bittiği ANDA zırh çıkar-tak ──
-                if self._cfg.use_armor_trick and self._cfg.armor_x > 0 and self._cfg.armor_y > 0:
-                    self._clicker.right_click_at(self._cfg.armor_x, self._cfg.armor_y)
+                if self._cfg.use_armor_trick:
+                    ax = self._capture.config.left + self._cfg.rel_armor_x
+                    ay = self._capture.config.top + self._cfg.rel_armor_y
+                    self._clicker.right_click_at(ax, ay)
                     status_msg = "Zirh trick: Animasyon iptal edildi"
                     self._armor_trick_used = True
 
@@ -619,32 +622,7 @@ class BotLogic:
 
                 # Envanter işlemleri (sadece zırh trick KAPALIYSA yap)
                 if not self._armor_trick_used:
-                    # Çöpleri Yere At
-                    if self._cfg.auto_drop_trash and self._capture is not None and detector is not None:
-                        if full_frame is None:
-                            full_frame = self._capture.grab_full_frame()
 
-                        trashes = detector.detect_inventory_items(full_frame, item_type="trash", threshold=0.60)
-                        if trashes:
-                            status_msg = f"Envanterde {len(trashes)} cop bulundu, atiliyor..."
-                            drop_x = self._cfg.trash_drop_x
-                            drop_y = self._cfg.trash_drop_y
-                            for tx, ty in trashes:
-                                self._clicker.drag_and_drop(tx, ty, drop_x, drop_y)
-                                # "Evet" butonunu bul ve tıkla (Enter yerine)
-                                time.sleep(0.3)  # Dialog'un açılmasını bekle
-                                confirm_frame = self._capture.grab_full_frame()
-                                yes_btn = detector.detect_yes_button(confirm_frame, threshold=0.60)
-                                if yes_btn:
-                                    self._clicker.left_click_screen(yes_btn[0], yes_btn[1])
-                                    status_msg = f"Cop atildi (Yes butonuna tiklandi)"
-                                else:
-                                    # Fallback: Enter dene
-                                    self._clicker.press_key('enter')
-                                    status_msg = f"Cop atildi (Enter ile onaylandi)"
-                                time.sleep(random.uniform(0.35, 0.55))
-                        else:
-                            status_msg = "Cop bulunamadi (template eslesmedi)"
 
                     # Balıkları aç
                     if self._cfg.auto_open_fishes and self._capture is not None and detector is not None:

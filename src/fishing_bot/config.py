@@ -167,6 +167,11 @@ class HumanConfig:
     # ── Hedefleme Modu (Senkronizasyon) ──
     targeting_mode: str = "organic"            # "organic" veya "terminator"
 
+    # ── Multi-Client (Çoklu Pencere) Senkronizasyonu ──
+    # Aynı bilgisayarda birden fazla bot çalıştırırken fare imlecinin çakışmasını
+    # önlemek için global bir kilitleme mekanizması kullanır.
+    use_mouse_lock: bool = True
+
 
 @dataclass
 class AutoBotConfig:
@@ -174,10 +179,12 @@ class AutoBotConfig:
     key_bait: str = '1'          # Yem tuşu (hızlı erişim slotu)
     key_fish: str = 'space'      # Olta atma tuşu
 
-    # Zırh animasyon iptali (Çıkar-Tak) için envanterdeki zırhın piksel koordinatları.
-    # GUI üzerinden seçilecek.
-    armor_x: int = 0
-    armor_y: int = 0
+    # ── Pencere ve Hizalama Ayarları ──
+    game_window_title: str = "METIN2"  # Otomatik tespit edilecek pencere başlığı
+    
+    # Zırh animasyon iptali (Çıkar-Tak) için zırhın pencere sol üst köşesine göre göreceli (relative) konumu
+    rel_armor_x: int = 680
+    rel_armor_y: int = 350
     use_armor_trick: bool = False # Zırh çıkar-tak aktif mi?
     auto_open_fishes: bool = True # Yakalanan balıklar otomatik açılsın mı?
     leave_to_me_yabbie: bool = False # Bana bırak (Yabbie Yengeci)
@@ -186,10 +193,10 @@ class AutoBotConfig:
     ignored_fishes: list = field(default_factory=list) # İptal edilecek balıklar listesi
     custom_fishes: list = field(default_factory=list)
     use_fish_ocr: bool = True
-    chat_region_x: int = 0
-    chat_region_y: int = 0
-    chat_region_w: int = 400
-    chat_region_h: int = 200
+    rel_chat_x: int = 20
+    rel_chat_y: int = 440
+    rel_chat_w: int = 380
+    rel_chat_h: int = 150
     
     # ── Auto Mod Ayarları ──
     auto_mode_min_mins: int = 3
@@ -198,7 +205,7 @@ class AutoBotConfig:
     auto_weight_esports: int = 50
     auto_weight_safe: int = 40
 
-    auto_drop_trash: bool = True  # Çöpler yere atılsın mı?
+
 
     # İnsan Yorulması (Fatigue System)
     use_fatigue_system: bool = True
@@ -218,9 +225,8 @@ class AutoBotConfig:
     # Minigame bittikten 10sn sonra hala yeni minigame başlamadıysa → space'e tekrar bas
     retry_cast_timeout: float = 10.0
 
-    # Çöp atma hedef koordinatları (ekranın oyun dünyasına denk gelen bir yeri)
-    trash_drop_x: int = 400
-    trash_drop_y: int = 300
+    # Çöp atma hedef koordinatları (pencerenin sol üst köşesine göre)
+
 
     # Minigame başına maksimum tıklama sayısı
     max_clicks_per_minigame: int = 8
@@ -257,10 +263,15 @@ class Config:
             "capture_left": self.capture.left,
             "capture_width": self.capture.width,
             "capture_height": self.capture.height,
-            # Zırh
-            "armor_x": self.autobot.armor_x,
-            "armor_y": self.autobot.armor_y,
-            "trash_drop_y": self.autobot.trash_drop_y,
+            # Zırh & Hizalama
+            "game_window_title": self.autobot.game_window_title,
+            "rel_armor_x": self.autobot.rel_armor_x,
+            "rel_armor_y": self.autobot.rel_armor_y,
+
+            "rel_chat_x": self.autobot.rel_chat_x,
+            "rel_chat_y": self.autobot.rel_chat_y,
+            "rel_chat_w": self.autobot.rel_chat_w,
+            "rel_chat_h": self.autobot.rel_chat_h,
             "auto_open_fishes": self.autobot.auto_open_fishes,
             "leave_to_me_yabbie": self.autobot.leave_to_me_yabbie,
             "auto_mode_min_mins": self.autobot.auto_mode_min_mins,
@@ -269,15 +280,11 @@ class Config:
             "auto_weight_esports": self.autobot.auto_weight_esports,
             "auto_weight_safe": self.autobot.auto_weight_safe,
             "use_armor_trick": self.autobot.use_armor_trick,
-            "auto_drop_trash": self.autobot.auto_drop_trash,
+
             "use_fatigue_system": self.autobot.use_fatigue_system,
             "ignored_fishes": self.autobot.ignored_fishes,
             "custom_fishes": self.autobot.custom_fishes,
             "use_fish_ocr": self.autobot.use_fish_ocr,
-            "chat_region_x": self.autobot.chat_region_x,
-            "chat_region_y": self.autobot.chat_region_y,
-            "chat_region_w": self.autobot.chat_region_w,
-            "chat_region_h": self.autobot.chat_region_h,
             # Human — reaksiyon & tıklama
             "reaction_min": self.human.reaction_min,
             "reaction_max": self.human.reaction_max,
@@ -305,6 +312,7 @@ class Config:
             "use_fps_jitter": self.human.use_fps_jitter,
             "fps_jitter_rate": self.human.fps_jitter_rate,
             "targeting_mode": self.human.targeting_mode,
+            "use_mouse_lock": self.human.use_mouse_lock,
             # Fish
             "fish_body_offset_y": self.fish.fish_body_offset_y,
             # AutoBot
@@ -312,7 +320,7 @@ class Config:
             "timing_randomization": self.autobot.timing_randomization,
             "delay_after_bait": self.autobot.delay_after_bait,
             "retry_cast_timeout": self.autobot.retry_cast_timeout,
-            "trash_drop_x": self.autobot.trash_drop_x,
+
         }
         try:
             with open(filepath, "w", encoding="utf-8") as f:
@@ -333,11 +341,15 @@ class Config:
                     self.capture.left = data.get("capture_left", self.capture.left)
                     self.capture.width = data.get("capture_width", self.capture.width)
                     self.capture.height = data.get("capture_height", self.capture.height)
-                    # Zırh
-                    self.autobot.armor_x = data.get("armor_x", self.autobot.armor_x)
-                    self.autobot.armor_y = data.get("armor_y", self.autobot.armor_y)
-                    self.autobot.trash_drop_x = data.get("trash_drop_x", self.autobot.trash_drop_x)
-                    self.autobot.trash_drop_y = data.get("trash_drop_y", self.autobot.trash_drop_y)
+                    # Zırh & Hizalama
+                    self.autobot.game_window_title = data.get("game_window_title", self.autobot.game_window_title)
+                    self.autobot.rel_armor_x = data.get("rel_armor_x", self.autobot.rel_armor_x)
+                    self.autobot.rel_armor_y = data.get("rel_armor_y", self.autobot.rel_armor_y)
+
+                    self.autobot.rel_chat_x = data.get("rel_chat_x", self.autobot.rel_chat_x)
+                    self.autobot.rel_chat_y = data.get("rel_chat_y", self.autobot.rel_chat_y)
+                    self.autobot.rel_chat_w = data.get("rel_chat_w", self.autobot.rel_chat_w)
+                    self.autobot.rel_chat_h = data.get("rel_chat_h", self.autobot.rel_chat_h)
                     self.autobot.auto_open_fishes = data.get("auto_open_fishes", self.autobot.auto_open_fishes)
                     self.autobot.leave_to_me_yabbie = data.get("leave_to_me_yabbie", self.autobot.leave_to_me_yabbie)
                     self.autobot.auto_mode_min_mins = data.get("auto_mode_min_mins", self.autobot.auto_mode_min_mins)
@@ -346,15 +358,11 @@ class Config:
                     self.autobot.auto_weight_esports = data.get("auto_weight_esports", self.autobot.auto_weight_esports)
                     self.autobot.auto_weight_safe = data.get("auto_weight_safe", self.autobot.auto_weight_safe)
                     self.autobot.use_armor_trick = data.get("use_armor_trick", self.autobot.use_armor_trick)
-                    self.autobot.auto_drop_trash = data.get("auto_drop_trash", self.autobot.auto_drop_trash)
+
                     self.autobot.use_fatigue_system = data.get("use_fatigue_system", self.autobot.use_fatigue_system)
                     self.autobot.ignored_fishes = data.get("ignored_fishes", self.autobot.ignored_fishes)
                     self.autobot.custom_fishes = data.get("custom_fishes", self.autobot.custom_fishes)
                     self.autobot.use_fish_ocr = data.get("use_fish_ocr", self.autobot.use_fish_ocr)
-                    self.autobot.chat_region_x = data.get("chat_region_x", self.autobot.chat_region_x)
-                    self.autobot.chat_region_y = data.get("chat_region_y", self.autobot.chat_region_y)
-                    self.autobot.chat_region_w = data.get("chat_region_w", self.autobot.chat_region_w)
-                    self.autobot.chat_region_h = data.get("chat_region_h", self.autobot.chat_region_h)
                     # Human — reaksiyon & tıklama
                     self.human.reaction_min = data.get("reaction_min", self.human.reaction_min)
                     self.human.reaction_max = data.get("reaction_max", self.human.reaction_max)
@@ -382,6 +390,7 @@ class Config:
                     self.human.use_fps_jitter = data.get("use_fps_jitter", self.human.use_fps_jitter)
                     self.human.fps_jitter_rate = data.get("fps_jitter_rate", self.human.fps_jitter_rate)
                     self.human.targeting_mode = data.get("targeting_mode", self.human.targeting_mode)
+                    self.human.use_mouse_lock = data.get("use_mouse_lock", self.human.use_mouse_lock)
                     # Fish
                     self.fish.fish_body_offset_y = data.get("fish_body_offset_y", self.fish.fish_body_offset_y)
                     # AutoBot
@@ -389,7 +398,5 @@ class Config:
                     self.autobot.timing_randomization = data.get("timing_randomization", self.autobot.timing_randomization)
                     self.autobot.delay_after_bait = data.get("delay_after_bait", self.autobot.delay_after_bait)
                     self.autobot.retry_cast_timeout = data.get("retry_cast_timeout", self.autobot.retry_cast_timeout)
-                    self.autobot.trash_drop_x = data.get("trash_drop_x", self.autobot.trash_drop_x)
-                    self.autobot.trash_drop_y = data.get("trash_drop_y", self.autobot.trash_drop_y)
             except Exception as e:
                 print(f"Ayarlar yuklenemedi: {e}")

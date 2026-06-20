@@ -107,8 +107,7 @@ class FishingBotGUI(ctk.CTk):
         self.title("🎣 Yasin2 Otonom Balık Botu V2")
         self.geometry("700x1000")
         self.config = Config()
-        self.bot_thread: Optional[BotRunnerThread] = None
-        
+        self.bot_threads = []
         # Grid Yapılandırması
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -124,8 +123,8 @@ class FishingBotGUI(ctk.CTk):
         self.btn_start = ctk.CTkButton(self.sidebar_frame, text="▶ Başlat", fg_color="green", hover_color="darkgreen", command=self.toggle_bot)
         self.btn_start.grid(row=1, column=0, padx=20, pady=10)
         
-        self.btn_calibrate = ctk.CTkButton(self.sidebar_frame, text="🎯 Kalibrasyon", command=self.run_calibration)
-        self.btn_calibrate.grid(row=2, column=0, padx=20, pady=10)
+        self.btn_overlay = ctk.CTkButton(self.sidebar_frame, text="📏 Hizalama Çizgileri", command=self.toggle_overlay)
+        self.btn_overlay.grid(row=2, column=0, padx=20, pady=10)
         
         self.switch_debug = ctk.CTkSwitch(self.sidebar_frame, text="Debug Görünümü")
         self.switch_debug.grid(row=3, column=0, padx=20, pady=10)
@@ -457,10 +456,7 @@ class FishingBotGUI(ctk.CTk):
         self.switch_open_fish.select()
         from fishing_bot.config import AutoBotConfig
         a = AutoBotConfig()
-        self.entry_drop_x.delete(0, "end")
-        self.entry_drop_x.insert(0, str(a.trash_drop_x))
-        self.entry_drop_y.delete(0, "end")
-        self.entry_drop_y.insert(0, str(a.trash_drop_y))
+
         
         self.entry_amin.delete(0, "end")
         self.entry_amin.insert(0, str(a.auto_mode_min_mins))
@@ -514,14 +510,10 @@ class FishingBotGUI(ctk.CTk):
         self.slider_fmiss.set(int(c.human.fast_fish_miss_rate * 100))
         self.lbl_fmiss.configure(text=str(int(c.human.fast_fish_miss_rate * 100)))
         # Zırh switch'i + konum label'ı
-        if c.autobot.use_armor_trick:
+        if getattr(c.autobot, 'use_armor_trick', False):
             self.switch_armor.select()
         else:
             self.switch_armor.deselect()
-        if c.autobot.armor_x > 0 and c.autobot.armor_y > 0:
-            self.lbl_armor_pos.configure(text=f"Zırh Konumu: X={c.autobot.armor_x}, Y={c.autobot.armor_y}")
-        else:
-            self.lbl_armor_pos.configure(text="Zırh Konumu: Ayarlanmadı")
 
         # Otonom toggle'lar
         if c.human.targeting_mode == "terminator":
@@ -533,20 +525,13 @@ class FishingBotGUI(ctk.CTk):
             self.switch_fatigue.select()
         else:
             self.switch_fatigue.deselect()
-        if c.autobot.auto_drop_trash:
-            self.switch_trash.select()
-        else:
-            self.switch_trash.deselect()
         if c.autobot.auto_open_fishes:
             self.switch_open_fish.select()
         else:
             self.switch_open_fish.deselect()
 
         # Çöp atma hedef koordinatları ve Auto mod
-        self.entry_drop_x.delete(0, "end")
-        self.entry_drop_x.insert(0, str(c.autobot.trash_drop_x))
-        self.entry_drop_y.delete(0, "end")
-        self.entry_drop_y.insert(0, str(c.autobot.trash_drop_y))
+
 
         self.entry_amin.delete(0, "end")
         self.entry_amin.insert(0, str(c.autobot.auto_mode_min_mins))
@@ -576,6 +561,12 @@ class FishingBotGUI(ctk.CTk):
             self.switch_fpsjitter.select()
         else:
             self.switch_fpsjitter.deselect()
+            
+        if getattr(self, 'switch_mouselock', None):
+            if getattr(c.human, 'use_mouse_lock', True):
+                self.switch_mouselock.select()
+            else:
+                self.switch_mouselock.deselect()
 
     def _build_extras_tab(self):
         parent_tab = self.tabview.tab("Zırh & Ekstralar")
@@ -589,16 +580,8 @@ class FishingBotGUI(ctk.CTk):
                                            command=self._on_extras_toggle)
         self.switch_armor.pack(pady=10)
 
-        armor_text = "Zırh Konumu: Ayarlanmadı"
-        if self.config.autobot.armor_x > 0 or self.config.autobot.armor_y > 0:
-            armor_text = f"Zırh Konumu: X={self.config.autobot.armor_x}, Y={self.config.autobot.armor_y}"
-        self.lbl_armor_pos = ctk.CTkLabel(tab, text=armor_text)
-        self.lbl_armor_pos.pack(pady=5)
-
-        self.btn_set_armor = ctk.CTkButton(tab, text="📍 Zırh Konumunu Seç", command=self.start_armor_pos_selection)
-        self.btn_set_armor.pack(pady=5)
-
-        ctk.CTkLabel(tab, text="Not: Butona basınca 3 saniye içinde mouse'u\nenvanterdeki zırhın üstüne götürün.", text_color="gray").pack(pady=5)
+        lbl_info = ctk.CTkLabel(tab, text="Zırh konumunu ayarlamak için soldaki 'Hizalama Çizgileri' butonuna basarak\noyun içindeki envanteri yeşil kutuya sürükleyin.", text_color="gray")
+        lbl_info.pack(pady=5)
 
         # Otonom İnsanlaştırma ve Envanter
         ctk.CTkLabel(tab, text="Yapay Zeka & Organik Davranış", font=ctk.CTkFont(weight="bold")).pack(pady=(15, 5))
@@ -616,23 +599,7 @@ class FishingBotGUI(ctk.CTk):
         self.switch_fatigue.select()
         ctk.CTkLabel(tab, text="  40-75dk çalışma sonrası 4-12dk AFK mola. Gerçek oyuncu gibi\nyorulup ara verir. 7/24 botlanmadığını gösterir.", text_color="#aaaaaa").pack()
 
-        self.switch_trash = ctk.CTkSwitch(tab, text="Otomatik Çöpleri Yere At (Trash Drop)",
-                                           command=self._on_extras_toggle)
-        self.switch_trash.pack(pady=5)
-        self.switch_trash.select()
-        ctk.CTkLabel(tab, text="  Envanterdeki çöpleri template matching ile tespit eder,\nsürükle-bırak ile yere atar, Enter ile onaylar.", text_color="#aaaaaa").pack()
 
-        f_drop = ctk.CTkFrame(tab)
-        f_drop.pack(fill="x", padx=10, pady=2)
-        ctk.CTkLabel(f_drop, text="Atma Hedef X:").pack(side="left", padx=5)
-        self.entry_drop_x = ctk.CTkEntry(f_drop, width=50)
-        self.entry_drop_x.insert(0, "400")
-        self.entry_drop_x.pack(side="left", padx=5)
-        ctk.CTkLabel(f_drop, text="Y:").pack(side="left", padx=5)
-        self.entry_drop_y = ctk.CTkEntry(f_drop, width=50)
-        self.entry_drop_y.insert(0, "300")
-        self.entry_drop_y.pack(side="left", padx=5)
-        ctk.CTkLabel(f_drop, text="oyun dünyası koordinatı", text_color="gray").pack(side="left", padx=5)
 
         self.switch_open_fish = ctk.CTkSwitch(tab, text="Otomatik Balıkları Aç",
                                                command=self._on_extras_toggle)
@@ -684,6 +651,38 @@ class FishingBotGUI(ctk.CTk):
         self.switch_fpsjitter.pack(pady=2)
         self.switch_fpsjitter.select()
         ctk.CTkLabel(tab, text="  Frame'leri %3 rastgele geciktirir. Düşük öncelikli ama faydalı.", text_color="#66ff66").pack()
+
+        # ── Çoklu Pencere (Multi-Client) ──
+        ctk.CTkLabel(tab, text="Çoklu Pencere (Multi-Client)", font=ctk.CTkFont(weight="bold")).pack(pady=(15, 5))
+        
+        self.switch_mouselock = ctk.CTkSwitch(tab, text="Fare Kilidi (Mouse Lock)", command=self._on_extras_toggle)
+        self.switch_mouselock.pack(pady=2)
+        if getattr(self.config.human, 'use_mouse_lock', True):
+            self.switch_mouselock.select()
+        else:
+            self.switch_mouselock.deselect()
+        ctk.CTkLabel(tab, text="  Aynı PC'de 2 pencere çalıştırırken farenin çakışmasını engeller.", text_color="#aaaaaa").pack()
+
+    def toggle_overlay(self):
+        from fishing_bot.ui_overlay import AlignmentOverlay
+        from fishing_bot.window_utils import get_game_windows
+        
+        if not hasattr(self, 'overlay_manager') or self.overlay_manager is None:
+            self.overlay_manager = AlignmentOverlay(self, self.config.autobot)
+            
+        if self.overlay_manager.overlays:
+            self.overlay_manager.hide()
+            self.btn_overlay.configure(text="📏 Hizalama Çizgileri", fg_color=["#3a7ebf", "#1f538d"])
+            self.log("Hizalama çizgileri gizlendi.")
+        else:
+            windows = get_game_windows(self.config.autobot.game_window_title)
+            if not windows:
+                self.log(f"HATA: '{self.config.autobot.game_window_title}' başlıklı oyun penceresi bulunamadı!")
+                return
+            
+            self.overlay_manager.show(windows)
+            self.btn_overlay.configure(text="✖ Çizgileri Gizle", fg_color="red", hover_color="darkred")
+            self.log(f"{len(windows)} adet oyun penceresine hizalama şablonu yerleştirildi.")
 
     # ── Metodlar ──
     
@@ -851,11 +850,8 @@ class FishingBotGUI(ctk.CTk):
         f_region = ctk.CTkFrame(tab)
         f_region.pack(fill="x", padx=20, pady=5)
         
-        self.lbl_chat_region = ctk.CTkLabel(f_region, text=f"Bölge: X={c.chat_region_x}, Y={c.chat_region_y}, W={c.chat_region_w}, H={c.chat_region_h}")
-        self.lbl_chat_region.pack(side="left", padx=10, pady=10)
-        
-        self.btn_set_chat = ctk.CTkButton(f_region, text="📍 Bölge Seç", width=100, command=self.start_chat_region_selection)
-        self.btn_set_chat.pack(side="right", padx=10, pady=10)
+        lbl_chat_info = ctk.CTkLabel(f_region, text="Sohbet okuma bölgesini ayarlamak için soldaki 'Hizalama Çizgileri' butonuna basarak\noyun içindeki sohbet kutusunu kırmızı çerçeveye sürükleyin.", text_color="gray")
+        lbl_chat_info.pack(side="left", padx=10, pady=10)
 
         ctk.CTkLabel(tab, text="Not: Butona bastıktan sonra ekrandan sohbet bölgesini fareyle sürükleyip seçin\nve ENTER tuşuna basarak onaylayın.", text_color="gray", font=ctk.CTkFont(size=11)).pack(pady=5)
 
@@ -866,18 +862,14 @@ class FishingBotGUI(ctk.CTk):
         c.human.targeting_mode = "terminator" if self.seg_targeting.get() == "Terminatör (Mouse Işınlanır)" else "organic"
         c.autobot.use_armor_trick = self.switch_armor.get() == 1
         c.autobot.use_fatigue_system = self.switch_fatigue.get() == 1
-        c.autobot.auto_drop_trash = self.switch_trash.get() == 1
         c.autobot.auto_open_fishes = self.switch_open_fish.get() == 1
         c.autobot.leave_to_me_yabbie = self.chk_leave_to_me.get() == 1
         c.human.use_gaussian_jitter = self.switch_gauss.get() == 1
         c.human.use_micro_movement = self.switch_micro.get() == 1
         c.human.use_dynamic_rhythm = self.switch_dynrhythm.get() == 1
         c.human.use_fps_jitter = self.switch_fpsjitter.get() == 1
-        try:
-            c.autobot.trash_drop_x = int(self.entry_drop_x.get())
-            c.autobot.trash_drop_y = int(self.entry_drop_y.get())
-        except ValueError:
-            pass
+        if hasattr(self, 'switch_mouselock'):
+            c.human.use_mouse_lock = self.switch_mouselock.get() == 1
         try:
             c.autobot.auto_mode_min_mins = int(self.entry_amin.get())
             c.autobot.auto_mode_max_mins = int(self.entry_amax.get())
@@ -942,13 +934,22 @@ class FishingBotGUI(ctk.CTk):
         self.lbl_catches.configure(text=f"Tutan Balık: {catches}")
         self.lbl_casts.configure(text=f"Atış Sayısı: {casts}")
         
+        # Update run duration dynamically too
+        if self.bot_threads and getattr(self.bot_threads[0], 'start_time', None):
+            import time
+            from datetime import timedelta
+            elapsed = int(time.time() - self.bot_threads[0].start_time)
+            td = timedelta(seconds=elapsed)
+            # Format: H:MM:SS
+            self.lbl_duration.configure(text=f"Süre: {td}")
+        
         # Balık istatistiklerini güncelle ve Yabbie→Adrenalin oto-tetikleme
         self._last_yabbie_count = getattr(self, "_last_yabbie_count", 0)
         self._yabbie_adrenalin_active = getattr(self, "_yabbie_adrenalin_active", False)
         self._previous_preset = getattr(self, "_previous_preset", None)
 
-        if self.bot_thread and hasattr(self.bot_thread, 'bot_logic') and self.bot_thread.bot_logic:
-            bot = self.bot_thread.bot_logic
+        if self.bot_threads and hasattr(self.bot_threads[0], 'bot_logic') and self.bot_threads[0].bot_logic:
+            bot = self.bot_threads[0].bot_logic
             encountered = bot.encountered_fishes
             if encountered:
                 total_fishes = sum(encountered.values())
@@ -999,6 +1000,7 @@ class FishingBotGUI(ctk.CTk):
             # ── Minigame bitti mi kontrolü: Adrenalin → Güvenli'ye dön ──
             # Bot MINIGAME'den çıktıysa (POST_CATCH, PREPARE, WAITING, vb.) geri dön
             if self._yabbie_adrenalin_active:
+                from fishing_bot.bot_logic import BotState
                 bot_state = bot.state
                 if bot_state not in (BotState.MINIGAME,):
                     self._yabbie_adrenalin_active = False
@@ -1009,57 +1011,54 @@ class FishingBotGUI(ctk.CTk):
                         self._apply_preset(previous, is_auto=True)
 
     def toggle_bot(self):
-        if self.bot_thread and self.bot_thread.running:
-            # Durdur
-            self.bot_thread.stop()
-            self.bot_thread.join(timeout=2.0)
+        # Eğer botlardan herhangi biri çalışıyorsa, hepsini durdur
+        if any(t.running for t in self.bot_threads):
+            for t in self.bot_threads:
+                t.stop()
+            for t in self.bot_threads:
+                t.join(timeout=2.0)
+            self.bot_threads.clear()
             self.btn_start.configure(text="▶ Başlat", fg_color="green", hover_color="darkgreen")
-            self.btn_calibrate.configure(state="normal")
-            self.log("Bot durduruluyor...")
+            self.btn_overlay.configure(state="normal")
+            self.log("Tüm botlar durduruldu.")
         else:
+            from fishing_bot.window_utils import get_game_windows
+            import copy
+            
             # Configleri arayüzden al
             self.config.debug_mode = self.switch_debug.get() == 1
             self.config.autobot.key_bait = self.entry_bait.get()
             self.config.autobot.key_fish = self.entry_fish.get()
-            try:
-                self.config.autobot.trash_drop_x = int(self.entry_drop_x.get())
-                self.config.autobot.trash_drop_y = int(self.entry_drop_y.get())
-            except ValueError:
-                pass
+
             self._on_extras_toggle()  # Tüm toggle'ları config'e yaz
             self._apply_sliders_to_config()  # İnce ayar slider'larını uygula
 
-            # Başlat
             self.btn_start.configure(text="⏹ Durdur", fg_color="red", hover_color="darkred")
-            self.btn_calibrate.configure(state="disabled")
+            self.btn_overlay.configure(state="disabled")
             
             self._last_yabbie_count = 0  # Yeni bot başlatıldığında yabbie sayacını sıfırla (ses/mod düzeltmesi)
             self._yabbie_adrenalin_active = False  # Adrenalin mod flag'ini sıfırla
-            self.bot_thread = BotRunnerThread(self.config, self.log, self.update_status)
-            self.bot_thread.start()
+            
+            windows = get_game_windows(self.config.autobot.game_window_title)
+            if not windows:
+                self.log(f"HATA: '{self.config.autobot.game_window_title}' başlıklı hiçbir oyun penceresi bulunamadı!")
+                self.btn_start.configure(text="▶ Başlat", fg_color="green", hover_color="darkgreen")
+                self.btn_overlay.configure(state="normal")
+                return
 
-    def run_calibration(self):
-        from fishing_bot.main import run_calibration as rc
-        self.log("Kalibrasyon baslatildi. Tam ekran goruntusunden oyunu secin.")
-        rc(self.config)
-        self.config.save_calibration()
-        self.log(f"Bolge ayarlandi: {self.config.capture.width}x{self.config.capture.height} (Kaydedildi)")
-        
-    def start_armor_pos_selection(self):
-        self.btn_set_armor.configure(state="disabled")
-        self.log("Lutfen 3 saniye icinde mouse'u zirhin uzerine getirin...")
-        # 3 saniye bekle (arka planda UI'ı kilitlemeden)
-        self.after(3000, self.save_armor_pos)
-        
-    def save_armor_pos(self):
-        x, y = pyautogui.position()
-        self.config.autobot.armor_x = int(x)
-        self.config.autobot.armor_y = int(y)
-        self.lbl_armor_pos.configure(text=f"Zırh Konumu: X={x}, Y={y}")
-        self.btn_set_armor.configure(state="normal")
-        self.switch_armor.select() # Otomatik aktif et
-        self.config.save_calibration()
-        self.log(f"Zirh konumu kaydedildi: X={x}, Y={y}")
+            self.bot_threads.clear()
+            for i, w in enumerate(windows):
+                # Her pencere için bağımsız bir Config kopyası oluştur
+                client_config = copy.deepcopy(self.config)
+                client_config.capture.left = w.left
+                client_config.capture.top = w.top
+                client_config.capture.width = w.width
+                client_config.capture.height = w.height
+                
+                t = BotRunnerThread(client_config, lambda m, p=w.title: self.log(f"[{p}] {m}"), self.update_status)
+                self.bot_threads.append(t)
+                t.start()
+                self.log(f"Bot başlatıldı: {w.title} ({w.left},{w.top})")
 
     def _update_ignored_fishes(self):
         ignored = []
@@ -1068,61 +1067,8 @@ class FishingBotGUI(ctk.CTk):
                 ignored.append(fish)
         self.config.autobot.ignored_fishes = ignored
         self.config.save_calibration()
-        
-    def start_chat_region_selection(self):
-        import threading
-        self.btn_set_chat.configure(state="disabled")
-        self.log("Sohbet bolgesi secimi baslatildi. Ekranda cizip ENTER'a basin.")
-        threading.Thread(target=self._run_chat_calibration, daemon=True).start()
 
-    def _run_chat_calibration(self):
-        try:
-            import mss
-            import numpy as np
-            import cv2
-            with mss.mss() as sct:
-                monitor = sct.monitors[1]
-                raw = sct.grab(monitor)
-                full_screen = np.array(raw, dtype=np.uint8)[:, :, :3]
-            
-            h, w = full_screen.shape[:2]
-            display_scale = 1.0
-            max_display = 1200
-            if w > max_display:
-                display_scale = max_display / w
-                display = cv2.resize(full_screen, (int(w * display_scale), int(h * display_scale)))
-            else:
-                display = full_screen
-                
-            # OpenCV penceresini en öne getirme hilesi
-            cv2.namedWindow("Sohbet Bolgesini Secin (ENTER=Onayla, C=Iptal)", cv2.WINDOW_NORMAL)
-            cv2.setWindowProperty("Sohbet Bolgesini Secin (ENTER=Onayla, C=Iptal)", cv2.WND_PROP_TOPMOST, 1)
-            
-            roi = cv2.selectROI("Sohbet Bolgesini Secin (ENTER=Onayla, C=Iptal)", display, fromCenter=False, showCrosshair=True)
-            cv2.destroyAllWindows()
-            
-            if roi != (0, 0, 0, 0):
-                x, y, rw, rh = roi
-                real_x = int(x / display_scale)
-                real_y = int(y / display_scale)
-                real_w = int(rw / display_scale)
-                real_h = int(rh / display_scale)
-                
-                self.config.autobot.chat_region_x = real_x
-                self.config.autobot.chat_region_y = real_y
-                self.config.autobot.chat_region_w = real_w
-                self.config.autobot.chat_region_h = real_h
-                self.config.save_calibration()
-                
-                self.after(0, lambda: self.lbl_chat_region.configure(text=f"Bölge: X={real_x}, Y={real_y}, W={real_w}, H={real_h}"))
-                self.log(f"Chat bolgesi kaydedildi: W={real_w}, H={real_h}")
-            else:
-                self.log("Chat bolgesi secimi iptal edildi.")
-                
-        except Exception as e:
-            self.log(f"Secim sirasinda hata: {e}")
-        finally:
-            self.after(0, lambda: self.btn_set_chat.configure(state="normal"))
+
 
 def launch_gui():
     import platform

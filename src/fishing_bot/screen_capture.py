@@ -29,6 +29,11 @@ class ScreenCapture:
         """Aktif yakalama bölgesini döndürür."""
         return self._monitor.copy()
 
+    @property
+    def config(self) -> CaptureConfig:
+        """Yapılandırmayı döndürür."""
+        return self._config
+
     def update_region(self, top: int, left: int, width: int, height: int) -> None:
         """Yakalama bölgesini günceller (kalibrasyon sonrası)."""
         self._monitor = {

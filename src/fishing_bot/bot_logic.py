@@ -16,6 +16,7 @@ import random
 import time
 from collections import deque
 from enum import Enum, auto
+import concurrent.futures
 
 from fishing_bot.config import AutoBotConfig
 from fishing_bot.clicker import HumanClicker
@@ -73,6 +74,11 @@ class BotLogic:
         self._last_minigame_end_time: float = 0.0
         # MINIGAME: İnsansı reaksiyon gecikmesi sistemi
         self._reaction_delay: float = 0.0       # Bu tıklama için random reaksiyon süresi
+
+        # Asenkron OCR okuma sistemi
+        self._ocr_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        self._ocr_future = None
+        self._ocr_attempts = 0
         self._fish_entered_safe_at: float = 0.0  # Balık safe zone'a ilk girdiği an
         self._fish_was_inside: bool = False      # Önceki frame'de balık içerde miydi?
         
@@ -269,56 +275,52 @@ class BotLogic:
                     return False, status_msg
                 self._hesitation_start = 0.0
                 
-                # ── İPTAL SİSTEMİ (Chat OCR) ──
+                # ── İPTAL SİSTEMİ (Chat OCR) Asenkron Yapı ──
                 if self._cfg.use_fish_ocr and self._cfg.chat_region_w > 0 and self._cfg.chat_region_h > 0:
-                    hooked_fish = None
-                    
-                    KNOWN_FISHES = [
-                        "Büyük Sudak Balığı", "Yılan Başı Balığı", "Görünmezlik Pelerini", "Bilge Kralın Eldiveni",
-                        "Hırsızın Eldiveni", "Denizkızı Anahtarı", "Lucy'nin Yüzüğü", "Kurbağa Balığı",
-                        "Dere Alabalığı", "Kadife Balığı", "Kral Yengeci", "Altın Yüzük", "Kaçak Pelerin", 
-                        "Ringa Balığı", "Gümüş Balığı", "Şiraz Balığı", "Sudak Balığı", "Altın Sudak", "Altın Sudak Balığı",
-                        "Ot Sazanı", "Som Balığı", "Minik Balık", "Saç Boyası", "Alabalık", "Uskumru", 
-                        "Palamut", "Zargana", "Yabbie Yengeci", "Levrek", "Yayın Balığı", "Çopra", "Sazan", "Lüfer Balığı"
-                    ]
-                    
-                    # Kullanıcının eklediği özel balıkları ve iptal listesindekileri tanınan kelimelere dahil et
-                    if hasattr(self._cfg, 'custom_fishes') and self._cfg.custom_fishes:
-                        KNOWN_FISHES.extend(self._cfg.custom_fishes)
-                    if hasattr(self._cfg, 'ignored_fishes') and self._cfg.ignored_fishes:
-                        KNOWN_FISHES.extend(self._cfg.ignored_fishes)
+                    if self._ocr_future is None:
+                        self._ocr_future = self._ocr_executor.submit(self._chat_reader.get_raw_chat)
+                        return False, "Balik araniyor (OCR)..."
+                    elif not self._ocr_future.done():
+                        return False, "Balik araniyor (OCR)..."
+                    else:
+                        raw_chat = self._ocr_future.result()
+                        self._ocr_future = None
+                        self._ocr_attempts += 1
                         
-                    # Tekrarlayan isimleri çıkar
-                    KNOWN_FISHES = list(set(KNOWN_FISHES))
-
-                    # Dinamik olarak en uzun isme göre sırala ki alt dize çakışmaları kesin olarak önlensin
-                    KNOWN_FISHES.sort(key=len, reverse=True)
-
-                    def normalize_tr(text):
-                        replacements = {'ü': 'u', 'ö': 'o', 'ı': 'i', 'ş': 's', 'ğ': 'g', 'ç': 'c', 'i̇': 'i'}
-                        text = text.lower()
-                        for k, v in replacements.items():
-                            text = text.replace(k, v)
-                        return text
-                    
-                    # Chat yazısının ekrana düşmesi oyun motorunda gecikebilir
-                    # Düşük sistemlerde (i3 vb.) OCR çok ağır olduğu için deneme sayısını 3'e düşürüp bekleme süresini uzatıyoruz.
-                    for _ in range(3):
-                        raw_chat = self._chat_reader.get_raw_chat()
+                        hooked_fish = None
                         fish_detected_in_chat = False
                         
+                        KNOWN_FISHES = [
+                            "Büyük Sudak Balığı", "Yılan Başı Balığı", "Görünmezlik Pelerini", "Bilge Kralın Eldiveni",
+                            "Hırsızın Eldiveni", "Denizkızı Anahtarı", "Lucy'nin Yüzüğü", "Kurbağa Balığı",
+                            "Dere Alabalığı", "Kadife Balığı", "Kral Yengeci", "Altın Yüzük", "Kaçak Pelerin", 
+                            "Ringa Balığı", "Gümüş Balığı", "Şiraz Balığı", "Sudak Balığı", "Altın Sudak", "Altın Sudak Balığı",
+                            "Ot Sazanı", "Som Balığı", "Minik Balık", "Saç Boyası", "Alabalık", "Uskumru", 
+                            "Palamut", "Zargana", "Yabbie Yengeci", "Levrek", "Yayın Balığı", "Çopra", "Sazan", "Lüfer Balığı"
+                        ]
+                        
+                        if hasattr(self._cfg, 'custom_fishes') and self._cfg.custom_fishes:
+                            KNOWN_FISHES.extend(self._cfg.custom_fishes)
+                        if hasattr(self._cfg, 'ignored_fishes') and self._cfg.ignored_fishes:
+                            KNOWN_FISHES.extend(self._cfg.ignored_fishes)
+                            
+                        KNOWN_FISHES = list(set(KNOWN_FISHES))
+                        KNOWN_FISHES.sort(key=len, reverse=True)
+
+                        def normalize_tr(text):
+                            replacements = {'ü': 'u', 'ö': 'o', 'ı': 'i', 'ş': 's', 'ğ': 'g', 'ç': 'c', 'i̇': 'i'}
+                            text = text.lower()
+                            for k, v in replacements.items():
+                                text = text.replace(k, v)
+                            return text
+
                         if raw_chat:
                             lines = raw_chat.split('\n')
-                            # En son (en alttaki) mesajlara öncelik ver
                             for line in reversed(lines):
-                                # Oyuncu mesajlarını (içinde ':' olan) atla, sadece sistem mesajlarına bak
                                 if ":" in line:
                                     continue
                                 
                                 line_norm = normalize_tr(line)
-                                detected_known_fish = None
-                                
-                                # Hangi balığın tutulduğunu tam olarak tespit et (Fuzzy OCR eşleştirme)
                                 best_fish = None
                                 best_score = 0.0
                                 
@@ -327,7 +329,6 @@ class BotLogic:
                                     len_k = len(known_norm)
                                     
                                     if len(line_norm) < len_k:
-                                        # Metin balık adından kısaysa tamamına bak
                                         ratio = difflib.SequenceMatcher(None, known_norm, line_norm).ratio()
                                         m = ratio * (len_k + len(line_norm)) / 2.0
                                         score = m * ratio
@@ -335,10 +336,6 @@ class BotLogic:
                                             best_score = score
                                             best_fish = known
                                     else:
-                                        # Karakter bazlı sliding window (OCR hatalarını kompanse eder)
-                                        # score = (Eşleşen Karakter Sayısı) * (Benzerlik Oranı)
-                                        # Bu formül sayesinde "Büyük Sudak Balığı" hatalı okunsa bile,
-                                        # "Sudak Balığı"nın 100% eşleşmesini yenecektir.
                                         for i in range(len(line_norm) - len_k + 1):
                                             window = line_norm[i:i+len_k]
                                             ratio = difflib.SequenceMatcher(None, known_norm, window).ratio()
@@ -349,40 +346,39 @@ class BotLogic:
                                                 best_score = score
                                                 best_fish = known
                                 
-                                detected_known_fish = best_fish
-                                
-                                # Tespit edilen balık bizim iptal listemizde var mı kontrol et
-                                if detected_known_fish:
+                                if best_fish:
                                     fish_detected_in_chat = True
-                                    self._current_hooked_fish = detected_known_fish
-                                    self.encountered_fishes[detected_known_fish] = self.encountered_fishes.get(detected_known_fish, 0) + 1
+                                    self._current_hooked_fish = best_fish
+                                    self.encountered_fishes[best_fish] = self.encountered_fishes.get(best_fish, 0) + 1
                                     
                                     for ignored_fish in self._cfg.ignored_fishes:
-                                        # İptal listesindeki balıklarla tam eşleşme arıyoruz
-                                        if normalize_tr(ignored_fish) == normalize_tr(detected_known_fish):
-                                            hooked_fish = detected_known_fish
+                                        if normalize_tr(ignored_fish) == normalize_tr(best_fish):
+                                            hooked_fish = best_fish
                                             break
-                                    # Herhangi bir balık tespit edildiği an (iptal edilsin veya edilmesin) 
-                                    # chat'in güncellendiğinden eminiz. Diğer satırlara bakmaya gerek yok.
                                     break 
                         
                         if fish_detected_in_chat:
-                            # Balık bulundu! Gereksiz yere bekleyip botu dondurma.
-                            break
-                        time.sleep(0.12)  # Düşük PC'ler için OCR arası dinlenme süresi artırıldı
-                        
-                        
-                    if hooked_fish:
-                        # İnsan okuma ve tepki verme süresi (Kullanıcı isteğiyle 1 sn yapıldı)
-                        time.sleep(random.uniform(0.9, 1.2))
-                        
-                        # İptal et (ESC tuşu) insani basma süresiyle
-                        self._clicker.press_key('esc', hold_min=0.10, hold_max=0.22)
-                        self._transition_to(BotState.POST_CATCH)
-                        status_msg = f"İptal Edildi: {hooked_fish}"
-                        return False, status_msg
-
-                self._transition_to(BotState.MINIGAME)
+                            self._ocr_attempts = 0
+                            if hooked_fish:
+                                time.sleep(random.uniform(0.9, 1.2))
+                                self._clicker.press_key('esc', hold_min=0.10, hold_max=0.22)
+                                self._transition_to(BotState.POST_CATCH)
+                                return False, f"İptal Edildi: {hooked_fish}"
+                            else:
+                                self._transition_to(BotState.MINIGAME)
+                                return True, status_msg
+                        elif self._ocr_attempts < 3:
+                            # 120ms bekleyip yeni task açmadan önce ana thread'i dondurmamak için bunu da asenkron yapabiliriz
+                            # Ama ufak bir time.sleep çok büyük dondurmaz. Yine de hiç dondurmayalım.
+                            time.sleep(0.05)
+                            self._ocr_future = self._ocr_executor.submit(self._chat_reader.get_raw_chat)
+                            return False, "Balik araniyor (Tekrar)..."
+                        else:
+                            self._ocr_attempts = 0
+                            self._transition_to(BotState.MINIGAME)
+                            return True, status_msg
+                else:
+                    self._transition_to(BotState.MINIGAME)
             else:
                 # Circle yok → sayacı sıfırla, tereddütü de sıfırla
                 self._consecutive_circle_count = 0

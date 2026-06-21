@@ -32,8 +32,8 @@ class ChatReader:
         img = np.array(screenshot)
 
         # Görüntüyü OCR için hazırla
-        # 1. Resmi 2 kat büyüt (OCR küçük yazılarda zorlanır). Performans için INTER_LINEAR kullanıyoruz.
-        img_scaled = cv2.resize(img, None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
+        # 1. Resmi 1.5 kat büyüt (Düşük PC performansı için). Performans için INTER_LINEAR kullanıyoruz.
+        img_scaled = cv2.resize(img, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_LINEAR)
         
         # 2. Gri tonlamaya çevir
         gray = cv2.cvtColor(img_scaled, cv2.COLOR_BGRA2GRAY)

@@ -734,9 +734,9 @@ class FishingBotGUI(ctk.CTk):
             c.human.click_inner_margin = 0.95
             c.human.intentional_miss_rate = 0.0
             c.human.fast_fish_miss_rate = 0.0
-            c.human.targeting_mode = "terminator"
+            c.human.targeting_mode = "organic"
             
-            c.human.use_micro_movement = False
+            c.human.use_micro_movement = True
             c.human.use_dynamic_rhythm = True
             c.human.use_gaussian_jitter = True
             c.human.use_fps_jitter = False

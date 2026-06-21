@@ -171,6 +171,23 @@ def run_calibration(config: Config) -> None:
     print(f"    Sol: {config.capture.left}, Ust: {config.capture.top}")
     print(f"    Genislik: {config.capture.width}, Yukseklik: {config.capture.height}\n")
 
+def hybrid_sleep(duration: float) -> None:
+    """
+    Windows'ta time.sleep() hassas değildir (15.6ms sapma).
+    Performansı korumak ve stuttering'i engellemek için melez bekleme:
+    Sürenin büyük kısmını time.sleep() ile uyu, kalan azıcık süreyi busy-wait ile bekle.
+    """
+    if duration <= 0:
+        return
+    # Eğer süre > 0.005 sn ise büyük kısmını sleep ile geç.
+    if duration > 0.005:
+        time.sleep(duration - 0.003)
+    
+    # Kalan hassas milisaniyeleri busy-wait ile doldur.
+    target = time.perf_counter() + duration
+    while time.perf_counter() < target:
+        pass
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Balik Tutma Botu")
@@ -271,7 +288,7 @@ def main() -> None:
             elapsed = time.time() - loop_start
             sleep_time = frame_interval - elapsed
             if sleep_time > 0:
-                time.sleep(sleep_time)
+                hybrid_sleep(sleep_time)
 
     except KeyboardInterrupt:
         print(f"\n\n  {Colors.YELLOW}Bot durduruldu.{Colors.RESET}")

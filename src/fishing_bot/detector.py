@@ -261,14 +261,40 @@ class Detector:
         """
         cfg = self._fish_cfg
 
+        offset_x, offset_y = 0, 0
+        roi_circle = circle
+
+        if circle is not None:
+            # ── PERFORMANS OPTİMİZASYONU: ROI KIRPMA ──
+            # Tüm ekranı işlemek yerine sadece daire etrafındaki küçük alanı işleyelim
+            # i3-380m gibi eski işlemcilerde devasa FPS artışı sağlar.
+            margin = int(circle.radius * self._circle_cfg.inner_margin)
+            y1 = max(0, circle.center_y - margin)
+            y2 = min(frame.shape[0], circle.center_y + margin)
+            x1 = max(0, circle.center_x - margin)
+            x2 = min(frame.shape[1], circle.center_x + margin)
+
+            if y2 <= y1 or x2 <= x1:
+                return None
+
+            frame = frame[y1:y2, x1:x2]
+            offset_x, offset_y = x1, y1
+            
+            # Kırpılmış alan için yeni circle kopyası (merkezi ayarlanmış)
+            roi_circle = Circle(
+                center_x=circle.center_x - offset_x,
+                center_y=circle.center_y - offset_y,
+                radius=circle.radius
+            )
+
         # Daire ROI maskesi oluştur.
         mask_roi = None
-        if circle is not None:
+        if roi_circle is not None:
             mask_roi = np.zeros(frame.shape[:2], dtype=np.uint8)
             cv2.circle(
                 mask_roi,
-                (circle.center_x, circle.center_y),
-                int(circle.radius * self._circle_cfg.inner_margin),
+                (roi_circle.center_x, roi_circle.center_y),
+                int(roi_circle.radius * self._circle_cfg.inner_margin),
                 255,
                 -1,
             )
@@ -306,14 +332,22 @@ class Detector:
             mask_combined = cv2.bitwise_and(mask_combined, mask_roi)
 
         # Önce birleşik mask'ta ara. Bulamazsa adaptive-only mask'a dön (yeni balık tipleri için).
-        result = self._find_best_contour(mask_combined, cfg, circle)
-        if result is not None:
-            return result
-
+        result = self._find_best_contour(mask_combined, cfg, roi_circle)
+        
         # Fallback: sadece adaptive threshold (yeni/görülmemiş balık renkleri için)
-        if mask_roi is not None:
-            mask_adaptive = cv2.bitwise_and(mask_adaptive, mask_roi)
-        return self._find_best_contour(mask_adaptive, cfg, circle)
+        if result is None:
+            if mask_roi is not None:
+                mask_adaptive = cv2.bitwise_and(mask_adaptive, mask_roi)
+            result = self._find_best_contour(mask_adaptive, cfg, roi_circle)
+
+        # Koordinatları geri ana ekrana yansıt (Offset)
+        if result is not None and (offset_x > 0 or offset_y > 0):
+            result.center_x += offset_x
+            result.center_y += offset_y
+            if result.contour is not None:
+                result.contour = result.contour + np.array([[[offset_x, offset_y]]])
+
+        return result
 
     def _find_best_contour(
         self,

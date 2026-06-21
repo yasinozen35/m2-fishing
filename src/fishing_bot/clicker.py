@@ -13,15 +13,6 @@ import math
 
 import pyautogui
 
-def _sleep_precise(duration: float) -> None:
-    if duration <= 0:
-        return
-    if duration > 0.005:
-        time.sleep(duration - 0.003)
-    target = time.perf_counter() + duration
-    while time.perf_counter() < target:
-        pass
-
 # Windows'ta PyDirectInput bile bazen oyun içi kilitlenmelere ve donmalara yol açıyor.
 # Bu yüzden en düşük seviyeli donanım API'sini (Ctypes Win32) kendimiz yazıyoruz!
 if sys.platform == "win32":
@@ -261,7 +252,7 @@ class HumanClicker:
                         mx = int(cur_x + (final_x - cur_x) * t)
                         my = int(cur_y + (final_y - cur_y) * t)
                         ctypes.windll.user32.SetCursorPos(mx, my)
-                        _sleep_precise(sleep_per_step)
+                        time.sleep(sleep_per_step)
             elif self._human.use_micro_movement:
                 cur_x, cur_y = pyautogui.position()
                 dist = math.hypot(final_x - cur_x, final_y - cur_y)
@@ -272,16 +263,16 @@ class HumanClicker:
                         mx = int(cur_x + (final_x - cur_x) * t)
                         my = int(cur_y + (final_y - cur_y) * t)
                         ctypes.windll.user32.SetCursorPos(mx, my)
-                        _sleep_precise(random.uniform(0.002, 0.005))
+                        time.sleep(random.uniform(0.002, 0.005))
                 else:
                     ctypes.windll.user32.SetCursorPos(int(final_x), int(final_y))
             else:
                 pydirectinput.moveTo(int(final_x), int(final_y))
 
             # OS'nin event'i işlemesi için mikro bekleme
-            _sleep_precise(0.004)
+            time.sleep(0.004)
             pydirectinput.mouseDown()
-            _sleep_precise(random.uniform(0.015, 0.030))
+            time.sleep(random.uniform(0.015, 0.030))
             pydirectinput.mouseUp()
         except Exception:
             # Fallback: Win32 API
@@ -298,7 +289,7 @@ class HumanClicker:
                         mx = int(cur_x + (final_x - cur_x) * t)
                         my = int(cur_y + (final_y - cur_y) * t)
                         ctypes.windll.user32.SetCursorPos(mx, my)
-                        _sleep_precise(sleep_per_step)
+                        time.sleep(sleep_per_step)
                 else:
                     ctypes.windll.user32.SetCursorPos(int(final_x), int(final_y))
             elif self._human.use_micro_movement:
@@ -312,14 +303,14 @@ class HumanClicker:
                         mx = int(cur_x + (final_x - cur_x) * t)
                         my = int(cur_y + (final_y - cur_y) * t)
                         ctypes.windll.user32.SetCursorPos(mx, my)
-                        _sleep_precise(random.uniform(0.002, 0.005))
+                        time.sleep(random.uniform(0.002, 0.005))
                 else:
                     ctypes.windll.user32.SetCursorPos(int(final_x), int(final_y))
             else:
                 ctypes.windll.user32.SetCursorPos(int(final_x), int(final_y))
-            _sleep_precise(0.004)
+            time.sleep(0.004)
             ctypes.windll.user32.mouse_event(0x0002, 0, 0, 0, 0)
-            _sleep_precise(random.uniform(0.015, 0.030))
+            time.sleep(random.uniform(0.015, 0.030))
             ctypes.windll.user32.mouse_event(0x0004, 0, 0, 0, 0)
 
         self._last_click_time = time.time()

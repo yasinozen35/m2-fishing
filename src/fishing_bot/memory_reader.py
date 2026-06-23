@@ -234,38 +234,67 @@ class MemoryReader:
         """
         Balık tutma state'ini bellekten oku.
         Bu metodu her frame'de çağır.
+        
+        Adres formatı: find_offsets_auto.py tarafından bulunan statik adresler.
+        circle_visible: timer adresi üzerinden tespit edilir (timer > 0 = minigame aktif).
         """
         now = time.time()
         dt = now - self._prev_frame_time if self._prev_frame_time > 0 else 0.016
 
-        # Circle
-        circle_x = self.read_float(self._resolve_addr("circle_x")) or 0.0
-        circle_y = self.read_float(self._resolve_addr("circle_y")) or 0.0
-        circle_radius = self.read_float(self._resolve_addr("circle_radius")) or 0.0
-        circle_visible = self.read_int32(self._resolve_addr("circle_visible")) == 1
+        # Format (int32 veya float)
+        fmt = self._offsets_raw.get("_format", "float")
 
-        # Fish
-        fish_x = self.read_float(self._resolve_addr("fish_x")) or 0.0
-        fish_y = self.read_float(self._resolve_addr("fish_y")) or 0.0
+        # ── Circle Visibility: Timer üzerinden tespit ──
+        # Timer adresi varsa: timer > 0.1 → minigame aktif → circle görünür
+        circle_visible = False
+        timer_addr = self._resolve_addr("timer")
+        if timer_addr:
+            timer_val = self.read_float(timer_addr)
+            if timer_val is not None and 0.1 < timer_val <= 16.0:
+                circle_visible = True
+        else:
+            # Timer adresi yoksa eski yöntemi dene
+            cv_addr = self._resolve_addr("circle_visible")
+            if cv_addr:
+                circle_visible = self.read_int32(cv_addr) == 1
 
-        # Hız hesapla (delta pozisyon / delta zaman)
+        # ── Circle (Çember) Koordinatları ──
+        circle_x_addr = self._resolve_addr("circle_x")
+        circle_y_addr = self._resolve_addr("circle_y")
+        circle_r_addr = self._resolve_addr("circle_radius")
+
+        circle_x = self.read_float(circle_x_addr) or 0.0 if circle_x_addr else 0.0
+        circle_y = self.read_float(circle_y_addr) or 0.0 if circle_y_addr else 0.0
+        circle_radius = self.read_float(circle_r_addr) or 0.0 if circle_r_addr else 0.0
+
+        # ── Fish (Balık) Koordinatları ──
+        fx_addr = self._resolve_addr("fish_x")
+        fy_addr = self._resolve_addr("fish_y")
+
+        if fmt == "int32":
+            fish_x_raw = self.read_int32(fx_addr) if fx_addr else None
+            fish_y_raw = self.read_int32(fy_addr) if fy_addr else None
+            fish_x = float(fish_x_raw) if fish_x_raw is not None else 0.0
+            fish_y = float(fish_y_raw) if fish_y_raw is not None else 0.0
+        else:
+            fish_x = self.read_float(fx_addr) or 0.0 if fx_addr else 0.0
+            fish_y = self.read_float(fy_addr) or 0.0 if fy_addr else 0.0
+
+        # ── Hız Hesapla ──
         speed_x = 0.0
         speed_y = 0.0
         if dt > 0.001 and self._prev_fish_x != 0 and fish_x != 0:
             speed_x = (fish_x - self._prev_fish_x) / dt
             speed_y = (fish_y - self._prev_fish_y) / dt
 
-        # Click count
+        # ── Click Count & Game Mode ──
         click_addr = self._resolve_addr("click_count")
         click_count = self.read_int32(click_addr) if click_addr else 0
-        if click_count is None:
-            click_count = 0
+        click_count = click_count or 0
 
-        # Game mode
         mode_addr = self._resolve_addr("game_mode")
         game_mode = self.read_int32(mode_addr) if mode_addr else 0
-        if game_mode is None:
-            game_mode = 0
+        game_mode = game_mode or 0
 
         # Önceki değerleri güncelle
         self._prev_fish_x = fish_x

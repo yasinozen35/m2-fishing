@@ -24,127 +24,51 @@ if sys.platform == "win32":
     MOUSEEVENTF_RIGHTDOWN = 0x0008
     MOUSEEVENTF_RIGHTUP = 0x0010
 
+    from fishing_bot.logitech import logitech_driver
+
     class Win32Clicker:
-        """PyAutoGUI ve PyDirectInput'un yerini alacak süper hızlı Native Windows Tıklayıcı."""
+        """PyAutoGUI ve PyDirectInput'un yerini alacak Logitech G-HUB Tıklayıcı."""
         @staticmethod
         def moveTo(x, y):
-            try:
-                import pydirectinput
-                move_func = pydirectinput.moveTo
-            except ImportError:
-                move_func = ctypes.windll.user32.SetCursorPos
-
-            import pyautogui
-            import math
-            import time
-            import random
-
-            start_x, start_y = pyautogui.position()
-            end_x, end_y = int(x), int(y)
-            
-            dist = math.hypot(end_x - start_x, end_y - start_y)
-            if dist < 5:
-                move_func(end_x, end_y)
-                return
-
-            # Hızlı ama insansı kaydırma süresi (50-80 milisaniye)
-            duration = random.uniform(0.05, 0.08)
-            steps = max(5, int(dist / 20))  
-            if steps > 12: steps = 12
-            
-            # Bezier kontrol noktaları (Kavis eklemek için)
-            offset = dist * 0.2
-            p1_x = start_x + (end_x - start_x) * 0.3 + random.uniform(-offset, offset)
-            p1_y = start_y + (end_y - start_y) * 0.3 + random.uniform(-offset, offset)
-            
-            p2_x = start_x + (end_x - start_x) * 0.7 + random.uniform(-offset, offset)
-            p2_y = start_y + (end_y - start_y) * 0.7 + random.uniform(-offset, offset)
-
-            sleep_time = duration / steps
-
-            for i in range(1, steps + 1):
-                t = i / steps
-                bx = (1-t)**3 * start_x + 3*(1-t)**2 * t * p1_x + 3*(1-t) * t**2 * p2_x + t**3 * end_x
-                by = (1-t)**3 * start_y + 3*(1-t)**2 * t * p1_y + 3*(1-t) * t**2 * p2_y + t**3 * end_y
-                move_func(int(bx), int(by))
-                time.sleep(sleep_time)
-
-            move_func(end_x, end_y)
+            logitech_driver.move_to(int(x), int(y))
             
         @staticmethod
         def fastClick():
-            """
-            Minigame için optimize edilmiş hızlı tıklama.
-            pydirectinput (SendInput) kullanır — DirectX oyunlarla uyumlu.
-            """
-            try:
-                import pydirectinput
-                pydirectinput.mouseDown()
-                time.sleep(random.uniform(0.020, 0.040))
-                pydirectinput.mouseUp()
-            except ImportError:
-                ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-                time.sleep(random.uniform(0.020, 0.040))
-                ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+            logitech_driver.click(duration=random.uniform(0.020, 0.040))
 
         @staticmethod
         def click():
-            try:
-                import pydirectinput
-                pydirectinput.mouseDown()
-                time.sleep(random.uniform(0.07, 0.12))
-                pydirectinput.mouseUp()
-            except ImportError:
-                ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-                time.sleep(random.uniform(0.07, 0.12))
-                ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+            logitech_driver.click(duration=random.uniform(0.07, 0.12))
 
         @staticmethod
         def rightClick():
-            try:
-                import pydirectinput
-                pydirectinput.mouseDown(button='right')
-                time.sleep(random.uniform(0.07, 0.12))
-                pydirectinput.mouseUp(button='right')
-            except ImportError:
-                ctypes.windll.user32.mouse_event(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, 0)
-                time.sleep(random.uniform(0.07, 0.12))
-                ctypes.windll.user32.mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0)
+            logitech_driver.click(button="right", duration=random.uniform(0.07, 0.12))
 
         @staticmethod
         def mouseDown(button='left'):
-            try:
-                import pydirectinput
-                pydirectinput.mouseDown(button=button)
-            except ImportError:
-                flag = MOUSEEVENTF_LEFTDOWN if button == 'left' else MOUSEEVENTF_RIGHTDOWN
-                ctypes.windll.user32.mouse_event(flag, 0, 0, 0, 0)
+            logitech_driver.mouse_down(button=button)
 
         @staticmethod
         def mouseUp(button='left'):
-            try:
-                import pydirectinput
-                pydirectinput.mouseUp(button=button)
-            except ImportError:
-                flag = MOUSEEVENTF_LEFTUP if button == 'left' else MOUSEEVENTF_RIGHTUP
-                ctypes.windll.user32.mouse_event(flag, 0, 0, 0, 0)
+            logitech_driver.mouse_up(button=button)
             
         @staticmethod
+        def _get_scan_code(key: str) -> int:
+            k = str(key).lower()
+            mapping = {
+                'escape': 0x01, '1': 0x02, '2': 0x03, '3': 0x04, '4': 0x05, 
+                '5': 0x06, '6': 0x07, '7': 0x08, '8': 0x09, '9': 0x0A, '0': 0x0B,
+                'space': 0x39, 'i': 0x17, 'enter': 0x1C
+            }
+            return mapping.get(k, 0x39)
+
+        @staticmethod
         def keyDown(key):
-            # DirectX oyunlarında klavye basışları için PyAutoGUI çalışmaz.
-            try:
-                import pydirectinput
-                pydirectinput.keyDown(key)
-            except:
-                pyautogui.keyDown(key)
+            logitech_driver.key_down(Win32Clicker._get_scan_code(key))
             
         @staticmethod
         def keyUp(key):
-            try:
-                import pydirectinput
-                pydirectinput.keyUp(key)
-            except:
-                pyautogui.keyUp(key)
+            logitech_driver.key_up(Win32Clicker._get_scan_code(key))
 
     gui_module = Win32Clicker()
 else:
@@ -228,52 +152,19 @@ class HumanClicker:
         final_x = screen_x + jitter_x
         final_y = screen_y + jitter_y
 
-        # ── 3. Mikro-hareketli tıklama (Anti-Cheat) ──
-        # İnsan 20px için bile ışınlanmaz — 2-4 adımda varır (8-20ms)
+        # ── 3. Mikro-hareketli tıklama (Anti-Cheat / Logitech) ──
         try:
-            import pyautogui
-            import pydirectinput
+            from fishing_bot.logitech import logitech_driver
 
-            if duration > 0.0:
-                # ── ORGANİK MOD: Hareketi tahmine göre zamana yay ──
-                cur_x, cur_y = pyautogui.position()
-                dist = math.hypot(final_x - cur_x, final_y - cur_y)
-                if dist <= 3:
-                    ctypes.windll.user32.SetCursorPos(int(final_x), int(final_y))
-                else:
-                    # Tıklama gecikmesini (~20ms) düşerek sadece hareket süresini bul
-                    move_duration = max(0.01, duration - 0.02)
-                    step_time = 0.015  # 15ms'de bir güncelle
-                    steps = max(3, int(move_duration / step_time))
-                    sleep_per_step = move_duration / steps
-                    
-                    for i in range(1, steps + 1):
-                        t = i / steps
-                        mx = int(cur_x + (final_x - cur_x) * t)
-                        my = int(cur_y + (final_y - cur_y) * t)
-                        ctypes.windll.user32.SetCursorPos(mx, my)
-                        time.sleep(sleep_per_step)
-            elif self._human.use_micro_movement:
-                cur_x, cur_y = pyautogui.position()
-                dist = math.hypot(final_x - cur_x, final_y - cur_y)
-                if dist > 3:
-                    steps = self._human.micro_movement_steps
-                    for i in range(1, steps + 1):
-                        t = i / steps
-                        mx = int(cur_x + (final_x - cur_x) * t)
-                        my = int(cur_y + (final_y - cur_y) * t)
-                        ctypes.windll.user32.SetCursorPos(mx, my)
-                        time.sleep(random.uniform(0.002, 0.005))
-                else:
-                    ctypes.windll.user32.SetCursorPos(int(final_x), int(final_y))
-            else:
-                pydirectinput.moveTo(int(final_x), int(final_y))
+            logitech_driver.move_to(int(final_x), int(final_y))
 
             # OS'nin event'i işlemesi için mikro bekleme
             time.sleep(0.004)
-            pydirectinput.mouseDown()
+            logitech_driver.mouse_down()
             time.sleep(random.uniform(0.015, 0.030))
-            pydirectinput.mouseUp()
+            logitech_driver.mouse_up()
+        except Exception:
+            pass
         except Exception:
             # Fallback: Win32 API
             if duration > 0.0:
@@ -346,16 +237,15 @@ class HumanClicker:
     def left_click_screen(self, screen_x: int, screen_y: int) -> None:
         """
         Ekran koordinatına sol tık (Yes butonu vs için).
-        pydirectinput (SendInput) kullanır — DirectX oyunlarla uyumlu.
+        Logitech API kullanır.
         """
         try:
-            import pydirectinput
-            # Mouse'u butonun üstüne SÜRÜKLE (oyun hover'ı algılasın)
-            pydirectinput.moveTo(int(screen_x), int(screen_y))
+            from fishing_bot.logitech import logitech_driver
+            logitech_driver.move_to(int(screen_x), int(screen_y))
             time.sleep(random.uniform(0.06, 0.12))  # Buton aktif olsun
-            pydirectinput.mouseDown()
+            logitech_driver.mouse_down()
             time.sleep(random.uniform(0.08, 0.15))  # Basılı tut
-            pydirectinput.mouseUp()
+            logitech_driver.mouse_up()
         except Exception:
             # Fallback: Win32 API
             ctypes.windll.user32.SetCursorPos(int(screen_x), int(screen_y))
@@ -367,28 +257,22 @@ class HumanClicker:
     def right_click_at(self, screen_x: int, screen_y: int) -> None:
         """
         Belirtilen ekran koordinatına (Global koordinat) insan benzeri sağ tıklar.
-        Zırh değişimi ve envanter yönetimi için kullanılır.
         """
-        # Mouse'u HIZLI hareket ettir (zırh trick için optimize)
         try:
+            from fishing_bot.logitech import logitech_driver
+            logitech_driver.move_to(int(screen_x), int(screen_y))
+            time.sleep(0.005)
+            logitech_driver.mouse_down(button="right")
+            time.sleep(random.uniform(0.03, 0.08))
+            logitech_driver.mouse_up(button="right")
+        except Exception:
             import pyautogui as _pg
             cur_x, cur_y = _pg.position()
-            dist = math.hypot(screen_x - cur_x, screen_y - cur_y)
-            steps = 3 if dist > 50 else 1
-            for i in range(1, steps + 1):
-                t = i / steps
-                mx = int(cur_x + (screen_x - cur_x) * t)
-                my = int(cur_y + (screen_y - cur_y) * t)
-                ctypes.windll.user32.SetCursorPos(mx, my)
-                time.sleep(0.004)
-        except Exception:
-            ctypes.windll.user32.SetCursorPos(screen_x, screen_y)
-
-        # Oyunun mouse'u algılaması için
-        time.sleep(random.uniform(0.04, 0.07))
-
-        # Sağ tıkla
-        gui_module.rightClick() if hasattr(gui_module, 'rightClick') else gui_module.click(button='right')
+            ctypes.windll.user32.SetCursorPos(int(screen_x), int(screen_y))
+            time.sleep(0.005)
+            ctypes.windll.user32.mouse_event(0x0008, 0, 0, 0, 0)
+            time.sleep(random.uniform(0.03, 0.08))
+            ctypes.windll.user32.mouse_event(0x0010, 0, 0, 0, 0)
 
     def drag_and_drop(self, start_x: int, start_y: int, end_x: int, end_y: int) -> None:
         """

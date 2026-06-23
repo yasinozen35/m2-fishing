@@ -1,0 +1,17 @@
+{
+  "_meta": {
+    "process": "metin2client.exe",
+    "pid": 14912,
+    "base_address": "0x00AE0000",
+    "discovered_at": "2026-06-22 22:57:25"
+  },
+  "offsets": {
+    "_format": "float",
+    "fish_x": "0x07DD8198",
+    "fish_y": "0x3F57EDE0",
+    "timer": "0x0A72BCF0",
+    "circle_x": "0x0A72BAAC",
+    "circle_y": "0x0A72BAB0",
+    "circle_radius": "0x0A72BAB4"
+  }
+}

@@ -59,15 +59,44 @@ class BotRunnerThread(threading.Thread):
             self.bot_logic = BotLogic(self.config.autobot, self.clicker, self.capture)
             self.bot_logic.start()
             
-            self.log_callback("Bot calisiyor! (Otonom Mod)")
+            self.log_callback("Bot calisiyor! (RPM / Bellek Okuma Modu)")
             
             frame_interval = 1.0 / self.config.target_fps
             
+            # RPM (Memory Reader) Entegrasyonu
+            memory_reader = None
+            try:
+                from fishing_bot.memory_reader import MemoryReader
+                memory_reader = MemoryReader("offsets.json")
+                self.log_callback("✅ Bellek Okuyucu (RPM) aktif! %0.1 CPU kullanimi.")
+            except Exception as e:
+                self.log_callback(f"⚠️ RPM baslatilamadi, yuksek CPU'lu OpenCV kullanilacak: {e}")
+
+            from fishing_bot.detector import DetectionResult, Circle, Fish
+
             while self.running:
                 loop_start = time.time()
+                
+                frame = None
+                result = None
 
-                frame = self.capture.grab_frame()
-                result = self.detector.detect(frame)
+                # Eger RPM modundaysak OpenCV detection YAPTIRMA
+                if memory_reader and memory_reader.is_alive():
+                    try:
+                        state = memory_reader.get_fishing_state()
+                        c_val = Circle(int(state.circle_x), int(state.circle_y), int(state.circle_radius)) if state.circle_visible else None
+                        f_val = Fish(int(state.fish_x), int(state.fish_y), None, 0) if (state.circle_visible and state.fish_x > 0) else None
+                        result = DetectionResult(c_val, f_val, state.is_fish_inside)
+                        
+                        if self.overlay:
+                            frame = self.capture.grab_frame()
+                    except Exception as mem_e:
+                        self.log_callback(f"RPM Hatasi: {mem_e}")
+                        result = DetectionResult(None, None, False)
+                else:
+                    # Fallback to old slow OpenCV
+                    frame = self.capture.grab_frame()
+                    result = self.detector.detect(frame)
 
                 clicked, status_msg = self.bot_logic.update(result, detector=self.detector)
 
@@ -78,7 +107,7 @@ class BotRunnerThread(threading.Thread):
                     self.bot_logic.total_casts
                 )
                 
-                if self.overlay:
+                if self.overlay and frame is not None:
                     self.overlay.render(frame, result, clicked=clicked)
                 
                 elapsed = time.time() - loop_start

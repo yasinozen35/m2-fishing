@@ -610,7 +610,8 @@ class MemoryScanner:
                 "discovered_at": time.strftime("%Y-%m-%d %H:%M:%S"),
             },
             "offsets": {
-                k: f"0x{v:08X}" for k, v in self.discovered_offsets.items()
+                k: (f"0x{v:08X}" if isinstance(v, int) else str(v))
+                for k, v in self.discovered_offsets.items()
             }
         }
 

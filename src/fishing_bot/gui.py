@@ -108,6 +108,8 @@ class FishingBotGUI(ctk.CTk):
         self.geometry("700x1000")
         self.config = Config()
         self.bot_thread: Optional[BotRunnerThread] = None
+        self._session_timer_job = None
+        self._session_timer_remaining = 0
         
         # Grid Yapılandırması
         self.grid_columnconfigure(1, weight=1)
@@ -116,7 +118,7 @@ class FishingBotGUI(ctk.CTk):
         # ── Sol Menü (Kontroller) ──
         self.sidebar_frame = ctk.CTkFrame(self, width=200, corner_radius=0)
         self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
-        self.sidebar_frame.grid_rowconfigure(4, weight=1)
+        self.sidebar_frame.grid_rowconfigure(5, weight=1)
         
         self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="Yasin2 FishBot V2", font=ctk.CTkFont(size=20, weight="bold"))
         self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 10))
@@ -130,6 +132,27 @@ class FishingBotGUI(ctk.CTk):
         self.switch_debug = ctk.CTkSwitch(self.sidebar_frame, text="Debug Görünümü")
         self.switch_debug.grid(row=3, column=0, padx=20, pady=10)
         self.switch_debug.deselect() # Varsayılan olarak KAPALI (Focus çalmasını engellemek için)
+
+        self.f_session_timer = ctk.CTkFrame(self.sidebar_frame, fg_color="transparent")
+        self.f_session_timer.grid(row=4, column=0, padx=20, pady=(5, 10), sticky="ew")
+
+        self.switch_session_timer = ctk.CTkSwitch(
+            self.f_session_timer, text="Çalışma Süresi", command=self._on_session_timer_toggle
+        )
+        self.switch_session_timer.pack(anchor="w", pady=(0, 5))
+
+        f_timer_input = ctk.CTkFrame(self.f_session_timer, fg_color="transparent")
+        f_timer_input.pack(fill="x")
+        ctk.CTkLabel(f_timer_input, text="Dakika:").pack(side="left")
+        self.entry_session_timer = ctk.CTkEntry(f_timer_input, width=50)
+        self.entry_session_timer.pack(side="left", padx=(5, 0))
+        self.entry_session_timer.bind("<FocusOut>", lambda _e: self._sync_session_timer_config())
+        self.entry_session_timer.bind("<Return>", lambda _e: self._on_session_timer_toggle())
+
+        self.lbl_session_timer = ctk.CTkLabel(
+            self.f_session_timer, text="Kalan: --:--", font=ctk.CTkFont(size=12), text_color="#ffcc66"
+        )
+        self.lbl_session_timer.pack(anchor="w", pady=(5, 0))
         
         # ── Sağ İçerik Konteyneri ──
         self.right_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -541,6 +564,13 @@ class FishingBotGUI(ctk.CTk):
             self.switch_open_fish.select()
         else:
             self.switch_open_fish.deselect()
+
+        self.entry_session_timer.delete(0, "end")
+        self.entry_session_timer.insert(0, str(c.autobot.session_timer_minutes))
+        if c.autobot.use_session_timer:
+            self.switch_session_timer.select()
+        else:
+            self.switch_session_timer.deselect()
 
         # Çöp atma hedef koordinatları ve Auto mod
         self.entry_drop_x.delete(0, "end")
@@ -960,8 +990,8 @@ class FishingBotGUI(ctk.CTk):
                 self.fish_counts_textbox.configure(state="disabled")
                 
                 # ── Otomatik Adrenalin Modu (Yabbie Yengeci için) ──
-                # Yabbie tespit edildiğinde Güvenli → Adrenalin'e geçer.
-                # Minigame bitince (POST_CATCH/PREPARE) Güvenli'ye döner.
+                # Sadece Auto Mod seçiliyken Yabbie tespit edildiğinde Adrenalin'e geçer.
+                # Diğer modlarda mevcut mod korunur. Minigame bitince Auto Mod'a geri döner.
                 current_yabbie = encountered.get("Yabbie Yengeci", 0)
                 if current_yabbie > self._last_yabbie_count:
                     self._last_yabbie_count = current_yabbie
@@ -988,15 +1018,15 @@ class FishingBotGUI(ctk.CTk):
                         self.log(f"Ses çalınırken hata: {e}")
                     # -----------------------
 
-                    # Terminatör modundaysa dokunma (kullanıcı bilerek seçmiş)
-                    if self.seg_modes_top.get() != "Terminatör" and not self._yabbie_adrenalin_active:
+                    # Sadece Auto Mod aktifken Adrenalin'e geç
+                    if self.seg_modes_top.get() == "Auto Mod" and not self._yabbie_adrenalin_active:
                         self._previous_preset = self.seg_modes_top.get()
                         self.log("🦀 Yabbie tespit edildi! Adrenalin moduna geçiliyor (minigame bitene kadar)...")
                         self.seg_modes_top.set("Adrenalin")
                         self._apply_preset("Adrenalin", is_auto=True)
                         self._yabbie_adrenalin_active = True
             
-            # ── Minigame bitti mi kontrolü: Adrenalin → Güvenli'ye dön ──
+            # ── Minigame bitti mi kontrolü: Adrenalin → Auto Mod'a dön ──
             # Bot MINIGAME'den çıktıysa (POST_CATCH, PREPARE, WAITING, vb.) geri dön
             if self._yabbie_adrenalin_active:
                 bot_state = bot.state
@@ -1008,6 +1038,68 @@ class FishingBotGUI(ctk.CTk):
                         self.seg_modes_top.set(previous)
                         self._apply_preset(previous, is_auto=True)
 
+    def _sync_session_timer_config(self):
+        try:
+            minutes = int(self.entry_session_timer.get())
+            if minutes <= 0:
+                raise ValueError
+            self.config.autobot.session_timer_minutes = minutes
+        except ValueError:
+            return False
+        self.config.autobot.use_session_timer = self.switch_session_timer.get() == 1
+        self.config.save_calibration()
+        return True
+
+    def _on_session_timer_toggle(self):
+        if self.switch_session_timer.get() == 1:
+            if not self._sync_session_timer_config():
+                self.switch_session_timer.deselect()
+                self.log("Geçerli bir dakika değeri girin (1 veya üzeri).")
+                return
+            minutes = self.config.autobot.session_timer_minutes
+            self.log(f"Çalışma süresi aktif: {minutes} dakika.")
+            if self.bot_thread and self.bot_thread.running:
+                self._start_session_timer()
+            else:
+                self.lbl_session_timer.configure(text=f"Hazır: {minutes:02d}:00")
+        else:
+            self._sync_session_timer_config()
+            self._stop_session_timer()
+            self.log("Çalışma süresi devre dışı.")
+
+    def _start_session_timer(self):
+        if self.switch_session_timer.get() != 1:
+            return
+        if not self._sync_session_timer_config():
+            self.switch_session_timer.deselect()
+            self.log("Geçerli bir dakika değeri girin (1 veya üzeri).")
+            return
+        self._stop_session_timer(reset_label=False)
+        self._session_timer_remaining = self.config.autobot.session_timer_minutes * 60
+        self._tick_session_timer()
+
+    def _stop_session_timer(self, reset_label: bool = True):
+        if self._session_timer_job is not None:
+            self.after_cancel(self._session_timer_job)
+            self._session_timer_job = None
+        if reset_label:
+            self.lbl_session_timer.configure(text="Kalan: --:--")
+
+    def _tick_session_timer(self):
+        remaining = self._session_timer_remaining
+        if remaining <= 0:
+            self.lbl_session_timer.configure(text="Kalan: 00:00")
+            self._session_timer_job = None
+            if self.bot_thread and self.bot_thread.running:
+                self.log("Çalışma süresi doldu. Bot durduruluyor...")
+                self.toggle_bot()
+            return
+
+        mins, secs = divmod(remaining, 60)
+        self.lbl_session_timer.configure(text=f"Kalan: {mins:02d}:{secs:02d}")
+        self._session_timer_remaining -= 1
+        self._session_timer_job = self.after(1000, self._tick_session_timer)
+
     def toggle_bot(self):
         if self.bot_thread and self.bot_thread.running:
             # Durdur
@@ -1015,6 +1107,7 @@ class FishingBotGUI(ctk.CTk):
             self.bot_thread.join(timeout=2.0)
             self.btn_start.configure(text="▶ Başlat", fg_color="green", hover_color="darkgreen")
             self.btn_calibrate.configure(state="normal")
+            self._stop_session_timer()
             self.log("Bot durduruluyor...")
         else:
             # Configleri arayüzden al
@@ -1037,6 +1130,8 @@ class FishingBotGUI(ctk.CTk):
             self._yabbie_adrenalin_active = False  # Adrenalin mod flag'ini sıfırla
             self.bot_thread = BotRunnerThread(self.config, self.log, self.update_status)
             self.bot_thread.start()
+            if self.switch_session_timer.get() == 1:
+                self._start_session_timer()
 
     def run_calibration(self):
         from fishing_bot.main import run_calibration as rc

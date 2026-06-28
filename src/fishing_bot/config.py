@@ -181,6 +181,10 @@ class AutoBotConfig:
     use_armor_trick: bool = False # Zırh çıkar-tak aktif mi?
     auto_open_fishes: bool = True # Yakalanan balıklar otomatik açılsın mı?
     leave_to_me_yabbie: bool = False # Bana bırak (Yabbie Yengeci)
+
+    # ── Çalışma Süresi Sınırı ──
+    use_session_timer: bool = False
+    session_timer_minutes: int = 60
     
     # ── Chat Okuma & İptal ──
     ignored_fishes: list = field(default_factory=list) # İptal edilecek balıklar listesi
@@ -263,6 +267,8 @@ class Config:
             "trash_drop_y": self.autobot.trash_drop_y,
             "auto_open_fishes": self.autobot.auto_open_fishes,
             "leave_to_me_yabbie": self.autobot.leave_to_me_yabbie,
+            "use_session_timer": self.autobot.use_session_timer,
+            "session_timer_minutes": self.autobot.session_timer_minutes,
             "auto_mode_min_mins": self.autobot.auto_mode_min_mins,
             "auto_mode_max_mins": self.autobot.auto_mode_max_mins,
             "auto_weight_terminator": self.autobot.auto_weight_terminator,
@@ -340,6 +346,8 @@ class Config:
                     self.autobot.trash_drop_y = data.get("trash_drop_y", self.autobot.trash_drop_y)
                     self.autobot.auto_open_fishes = data.get("auto_open_fishes", self.autobot.auto_open_fishes)
                     self.autobot.leave_to_me_yabbie = data.get("leave_to_me_yabbie", self.autobot.leave_to_me_yabbie)
+                    self.autobot.use_session_timer = data.get("use_session_timer", self.autobot.use_session_timer)
+                    self.autobot.session_timer_minutes = data.get("session_timer_minutes", self.autobot.session_timer_minutes)
                     self.autobot.auto_mode_min_mins = data.get("auto_mode_min_mins", self.autobot.auto_mode_min_mins)
                     self.autobot.auto_mode_max_mins = data.get("auto_mode_max_mins", self.autobot.auto_mode_max_mins)
                     self.autobot.auto_weight_terminator = data.get("auto_weight_terminator", self.autobot.auto_weight_terminator)

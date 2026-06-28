@@ -191,7 +191,7 @@ class FishingBotGUI(ctk.CTk):
     def _build_dashboard_tab(self):
         tab = self.tabview.tab("Ana Ekran")
         tab.grid_columnconfigure(0, weight=1)
-        tab.grid_rowconfigure(1, weight=1)
+        tab.grid_rowconfigure(2, weight=1)
         
         # İstatistikler
         self.stats_frame = ctk.CTkFrame(tab)
@@ -205,10 +205,31 @@ class FishingBotGUI(ctk.CTk):
         
         self.lbl_casts = ctk.CTkLabel(self.stats_frame, text="Atış Sayısı: 0")
         self.lbl_casts.grid(row=0, column=2, padx=20, pady=10)
+
+        self.insights_frame = ctk.CTkFrame(tab)
+        self.insights_frame.grid(row=1, column=0, padx=10, pady=(0, 10), sticky="ew")
+        self.insights_frame.grid_columnconfigure((0, 1, 2, 3), weight=1)
+
+        ctk.CTkLabel(
+            self.insights_frame, text="Oturum İstatistikleri",
+            font=ctk.CTkFont(weight="bold")
+        ).grid(row=0, column=0, columnspan=4, padx=10, pady=(8, 4), sticky="w")
+
+        self.lbl_last_yabbie = ctk.CTkLabel(self.insights_frame, text="Son Yabbie: —", text_color="#66ccff")
+        self.lbl_last_yabbie.grid(row=1, column=0, padx=10, pady=6, sticky="w")
+
+        self.lbl_yabbie_rate = ctk.CTkLabel(self.insights_frame, text="Yabbie/saat: —", text_color="#66ccff")
+        self.lbl_yabbie_rate.grid(row=1, column=1, padx=10, pady=6, sticky="w")
+
+        self.lbl_avg_cycle = ctk.CTkLabel(self.insights_frame, text="Ort. tur: —", text_color="#ffcc66")
+        self.lbl_avg_cycle.grid(row=1, column=2, padx=10, pady=6, sticky="w")
+
+        self.lbl_rare_fish = ctk.CTkLabel(self.insights_frame, text="Nadir: 0", text_color="#cc99ff")
+        self.lbl_rare_fish.grid(row=1, column=3, padx=10, pady=6, sticky="w")
         
         # Alt Kısım: Log ve Sayaç
         self.bottom_frame = ctk.CTkFrame(tab)
-        self.bottom_frame.grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
+        self.bottom_frame.grid(row=2, column=0, padx=10, pady=10, sticky="nsew")
         self.bottom_frame.grid_rowconfigure(0, weight=1)
         self.bottom_frame.grid_rowconfigure(1, weight=1)
         self.bottom_frame.grid_columnconfigure(0, weight=1)
@@ -476,6 +497,7 @@ class FishingBotGUI(ctk.CTk):
         self.seg_targeting.set("Organik (Mouse Akıcı)")
         self.switch_armor.deselect()
         self.switch_fatigue.select()
+        self.switch_micro_break.select()
         self.switch_trash.select()
         self.switch_open_fish.select()
         from fishing_bot.config import AutoBotConfig
@@ -556,6 +578,10 @@ class FishingBotGUI(ctk.CTk):
             self.switch_fatigue.select()
         else:
             self.switch_fatigue.deselect()
+        if c.autobot.use_micro_breaks:
+            self.switch_micro_break.select()
+        else:
+            self.switch_micro_break.deselect()
         if c.autobot.auto_drop_trash:
             self.switch_trash.select()
         else:
@@ -645,6 +671,17 @@ class FishingBotGUI(ctk.CTk):
         self.switch_fatigue.pack(pady=5)
         self.switch_fatigue.select()
         ctk.CTkLabel(tab, text="  40-75dk çalışma sonrası 4-12dk AFK mola. Gerçek oyuncu gibi\nyorulup ara verir. 7/24 botlanmadığını gösterir.", text_color="#aaaaaa").pack()
+
+        self.switch_micro_break = ctk.CTkSwitch(
+            tab, text="Mikro Molalar (Telefona Bakma)", command=self._on_extras_toggle
+        )
+        self.switch_micro_break.pack(pady=5)
+        self.switch_micro_break.select()
+        ctk.CTkLabel(
+            tab,
+            text="  8-20dk aralıklarla 30-90sn kısa molalar. Uzun oturumlarda\ninsansı davranış için mola sistemine eklenir.",
+            text_color="#aaaaaa",
+        ).pack()
 
         self.switch_trash = ctk.CTkSwitch(tab, text="Otomatik Çöpleri Yere At (Trash Drop)",
                                            command=self._on_extras_toggle)
@@ -896,6 +933,7 @@ class FishingBotGUI(ctk.CTk):
         c.human.targeting_mode = "terminator" if self.seg_targeting.get() == "Terminatör (Mouse Işınlanır)" else "organic"
         c.autobot.use_armor_trick = self.switch_armor.get() == 1
         c.autobot.use_fatigue_system = self.switch_fatigue.get() == 1
+        c.autobot.use_micro_breaks = self.switch_micro_break.get() == 1
         c.autobot.auto_drop_trash = self.switch_trash.get() == 1
         c.autobot.auto_open_fishes = self.switch_open_fish.get() == 1
         c.autobot.leave_to_me_yabbie = self.chk_leave_to_me.get() == 1
@@ -979,6 +1017,17 @@ class FishingBotGUI(ctk.CTk):
 
         if self.bot_thread and hasattr(self.bot_thread, 'bot_logic') and self.bot_thread.bot_logic:
             bot = self.bot_thread.bot_logic
+            stats = bot.get_session_stats()
+            self.lbl_last_yabbie.configure(text=f"Son Yabbie: {stats['last_yabbie']}")
+            self.lbl_yabbie_rate.configure(
+                text=f"Yabbie/saat: {stats['yabbie_per_hour']:.1f} ({stats['yabbie_count']} adet)"
+            )
+            if stats["cycle_count"] > 0:
+                self.lbl_avg_cycle.configure(text=f"Ort. tur: {stats['avg_cycle_sec']:.1f}s ({stats['cycle_count']} tur)")
+            else:
+                self.lbl_avg_cycle.configure(text="Ort. tur: —")
+            self.lbl_rare_fish.configure(text=f"Nadir: {stats['rare_total']}")
+
             encountered = bot.encountered_fishes
             if encountered:
                 total_fishes = sum(encountered.values())

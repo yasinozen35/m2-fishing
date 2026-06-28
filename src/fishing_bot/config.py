@@ -211,6 +211,13 @@ class AutoBotConfig:
     fatigue_duration_min: float = 4.0 * 60.0   # Minimum mola süresi (saniye)
     fatigue_duration_max: float = 12.0 * 60.0  # Maksimum mola süresi (saniye)
 
+    # Mikro molalar (telefona bakma simülasyonu)
+    use_micro_breaks: bool = True
+    micro_break_interval_min: float = 8.0 * 60.0   # 8-20 dk arası tetiklenir
+    micro_break_interval_max: float = 20.0 * 60.0
+    micro_break_duration_min: float = 30.0
+    micro_break_duration_max: float = 90.0
+
     # Döngü zamanlamaları (saniye)
     delay_after_bait: float = 1.5    # Yem taktıktan sonra olta atmadan önce bekleme (1.5sn)
     delay_after_armor: float = 0.3   # Zırh değiştirdikten sonra bekleme
@@ -277,6 +284,11 @@ class Config:
             "use_armor_trick": self.autobot.use_armor_trick,
             "auto_drop_trash": self.autobot.auto_drop_trash,
             "use_fatigue_system": self.autobot.use_fatigue_system,
+            "use_micro_breaks": self.autobot.use_micro_breaks,
+            "micro_break_interval_min": self.autobot.micro_break_interval_min,
+            "micro_break_interval_max": self.autobot.micro_break_interval_max,
+            "micro_break_duration_min": self.autobot.micro_break_duration_min,
+            "micro_break_duration_max": self.autobot.micro_break_duration_max,
             "ignored_fishes": self.autobot.ignored_fishes,
             "custom_fishes": self.autobot.custom_fishes,
             "use_fish_ocr": self.autobot.use_fish_ocr,
@@ -356,6 +368,11 @@ class Config:
                     self.autobot.use_armor_trick = data.get("use_armor_trick", self.autobot.use_armor_trick)
                     self.autobot.auto_drop_trash = data.get("auto_drop_trash", self.autobot.auto_drop_trash)
                     self.autobot.use_fatigue_system = data.get("use_fatigue_system", self.autobot.use_fatigue_system)
+                    self.autobot.use_micro_breaks = data.get("use_micro_breaks", self.autobot.use_micro_breaks)
+                    self.autobot.micro_break_interval_min = data.get("micro_break_interval_min", self.autobot.micro_break_interval_min)
+                    self.autobot.micro_break_interval_max = data.get("micro_break_interval_max", self.autobot.micro_break_interval_max)
+                    self.autobot.micro_break_duration_min = data.get("micro_break_duration_min", self.autobot.micro_break_duration_min)
+                    self.autobot.micro_break_duration_max = data.get("micro_break_duration_max", self.autobot.micro_break_duration_max)
                     self.autobot.ignored_fishes = data.get("ignored_fishes", self.autobot.ignored_fishes)
                     self.autobot.custom_fishes = data.get("custom_fishes", self.autobot.custom_fishes)
                     self.autobot.use_fish_ocr = data.get("use_fish_ocr", self.autobot.use_fish_ocr)

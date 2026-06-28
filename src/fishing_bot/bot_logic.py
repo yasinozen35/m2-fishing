@@ -21,6 +21,12 @@ from fishing_bot.config import AutoBotConfig
 from fishing_bot.clicker import HumanClicker
 from fishing_bot.detector import DetectionResult
 
+RARE_FISHES = frozenset({
+    "Yabbie Yengeci", "Kral Yengeci", "Altın Sudak", "Kadife Balığı",
+    "Altın Yüzük", "Görünmezlik Pelerini", "Bilge Kralın Eldiveni",
+    "Hırsızın Eldiveni", "Kaçak Pelerin", "Lucy'nin Yüzüğü", "Denizkızı Anahtarı",
+})
+
 
 class BotState(Enum):
     """Botun mevcut durumu."""
@@ -31,6 +37,7 @@ class BotState(Enum):
     MINIGAME = auto()      # Balık yakalama mini-oyunu (3 tık)
     POST_CATCH = auto()    # Yakaladıktan sonra bekleme / envanter yönetimi
     FATIGUE_BREAK = auto() # İnsan yorulması, AFK bekleme modu
+    MICRO_BREAK = auto()   # Kısa telefona bakma molası
 
 
 class BotLogic:
@@ -51,7 +58,9 @@ class BotLogic:
         self._postcatch_action_done = False
 
         self._next_fatigue_time = 0.0
-        self._fatigue_duration = 0.0
+        self._next_micro_break_time = 0.0
+        self._break_duration = 0.0
+        self._break_is_micro = False
 
         # Frame-timer: time.sleep() yerine non-blocking bekleme
         self._block_until: float = 0.0
@@ -82,17 +91,28 @@ class BotLogic:
         # Karşılaşılan balıkların sayacı (GUI için)
         self.encountered_fishes: dict[str, int] = {}
 
+        # Oturum istatistikleri (GUI için)
+        self._session_start_time = 0.0
+        self._last_yabbie_time: float | None = None
+        self._yabbie_timestamps: list[float] = []
+        self._rare_fish_counts: dict[str, int] = {}
+        self._cycle_start_time: float | None = None
+        self._cycle_durations: deque = deque(maxlen=500)
+
     def start(self) -> None:
         """Döngüyü başlatır."""
         self.state = BotState.PREPARE
         self._state_start_time = time.time()
         self._click_count_in_minigame = 0
         
-        if self._cfg.use_fatigue_system:
-            self._next_fatigue_time = time.time() + random.uniform(
-                self._cfg.fatigue_interval_min, 
-                self._cfg.fatigue_interval_max
-            )
+        self._session_start_time = time.time()
+        self._last_yabbie_time = None
+        self._yabbie_timestamps.clear()
+        self._rare_fish_counts.clear()
+        self._cycle_durations.clear()
+        self._cycle_start_time = None
+        self._schedule_fatigue()
+        self._schedule_micro_break()
 
     def stop(self) -> None:
         """Döngüyü durdurur."""
@@ -117,7 +137,7 @@ class BotLogic:
 
         # ── WATCHDOG: Minigame sonrası 10sn içinde yeni minigame başlamazsa ──
         # CAST state'ine zorla (space'e tekrar bas)
-        if (self.state not in (BotState.IDLE, BotState.MINIGAME, BotState.FATIGUE_BREAK)
+        if (self.state not in (BotState.IDLE, BotState.MINIGAME, BotState.FATIGUE_BREAK, BotState.MICRO_BREAK)
                 and self._last_minigame_end_time > 0
                 and now - self._last_minigame_end_time > self._cfg.retry_cast_timeout):
             status_msg = f"Watchdog: {int(now - self._last_minigame_end_time)}s oldu, tekrar olta atiliyor..."
@@ -355,6 +375,7 @@ class BotLogic:
                                     fish_detected_in_chat = True
                                     self._current_hooked_fish = detected_known_fish
                                     self.encountered_fishes[detected_known_fish] = self.encountered_fishes.get(detected_known_fish, 0) + 1
+                                    self._record_fish_encounter(detected_known_fish, now)
                                     
                                     for ignored_fish in self._cfg.ignored_fishes:
                                         # İptal listesindeki balıklarla tam eşleşme arıyoruz
@@ -660,13 +681,7 @@ class BotLogic:
 
             # ── Zırh trick kullanıldıysa HEMEN PREPARE'e geç (bekleme YOK) ──
             if getattr(self, "_armor_trick_used", False):
-                if self._cfg.use_fatigue_system and time.time() > self._next_fatigue_time:
-                    self._fatigue_duration = random.uniform(
-                        self._cfg.fatigue_duration_min,
-                        self._cfg.fatigue_duration_max
-                    )
-                    self._transition_to(BotState.FATIGUE_BREAK)
-                else:
+                if not self._maybe_take_break():
                     self._transition_to(BotState.PREPARE)
             else:
                 # Animasyon beklemesi (rastgeleleştirilmiş) — normal akış
@@ -675,18 +690,15 @@ class BotLogic:
                     self._postcatch_target_delay = self._randomize_delay(self._cfg.delay_after_catch)
                     _postcatch_delay = self._postcatch_target_delay
                 if elapsed > _postcatch_delay:
-                    if self._cfg.use_fatigue_system and time.time() > self._next_fatigue_time:
-                        self._fatigue_duration = random.uniform(
-                            self._cfg.fatigue_duration_min,
-                            self._cfg.fatigue_duration_max
-                        )
-                        self._transition_to(BotState.FATIGUE_BREAK)
-                    else:
+                    if not self._maybe_take_break():
                         self._transition_to(BotState.PREPARE)
                     
-        elif self.state == BotState.FATIGUE_BREAK:
-            remaining = self._fatigue_duration - elapsed
-            status_msg = f"Cay Molasi ☕ (Kalan: {int(remaining)}s)"
+        elif self.state in (BotState.FATIGUE_BREAK, BotState.MICRO_BREAK):
+            remaining = self._break_duration - elapsed
+            if self._break_is_micro:
+                status_msg = f"Telefona Bakiyor (Kalan: {int(remaining)}s)"
+            else:
+                status_msg = f"Cay Molasi (Kalan: {int(remaining)}s)"
             
             # ── Moladayken Rastgele Fare Hareketleri (Bilgisayar başında vakit geçiriyor gibi) ──
             if now - getattr(self, "_last_idle_move", 0.0) > random.uniform(2.0, 5.0):
@@ -702,13 +714,95 @@ class BotLogic:
                     pass
             
             if remaining <= 0:
-                self._next_fatigue_time = time.time() + random.uniform(
-                    self._cfg.fatigue_interval_min, 
-                    self._cfg.fatigue_interval_max
-                )
+                if self._break_is_micro:
+                    self._schedule_micro_break()
+                else:
+                    self._schedule_fatigue()
                 self._transition_to(BotState.PREPARE)
 
         return clicked, status_msg
+
+    def _record_fish_encounter(self, fish_name: str, now: float) -> None:
+        if fish_name == "Yabbie Yengeci":
+            self._last_yabbie_time = now
+            self._yabbie_timestamps.append(now)
+        if fish_name in RARE_FISHES:
+            self._rare_fish_counts[fish_name] = self._rare_fish_counts.get(fish_name, 0) + 1
+
+    def get_session_stats(self) -> dict:
+        now = time.time()
+        session_elapsed = now - self._session_start_time if self._session_start_time else 0.0
+
+        if self._last_yabbie_time is None:
+            last_yabbie = "Henüz yok"
+        else:
+            ago = now - self._last_yabbie_time
+            if ago < 60:
+                last_yabbie = f"{int(ago)} sn önce"
+            elif ago < 3600:
+                last_yabbie = f"{int(ago // 60)} dk önce"
+            else:
+                last_yabbie = time.strftime("%H:%M", time.localtime(self._last_yabbie_time))
+
+        hours = max(session_elapsed / 3600.0, 1.0 / 3600.0)
+        yabbie_count = len(self._yabbie_timestamps)
+        yabbie_per_hour = yabbie_count / hours if session_elapsed > 0 else 0.0
+
+        avg_cycle = 0.0
+        if self._cycle_durations:
+            avg_cycle = sum(self._cycle_durations) / len(self._cycle_durations)
+
+        return {
+            "last_yabbie": last_yabbie,
+            "yabbie_per_hour": yabbie_per_hour,
+            "yabbie_count": yabbie_count,
+            "avg_cycle_sec": avg_cycle,
+            "cycle_count": len(self._cycle_durations),
+            "rare_total": sum(self._rare_fish_counts.values()),
+            "session_minutes": session_elapsed / 60.0,
+        }
+
+    def _schedule_fatigue(self) -> None:
+        if self._cfg.use_fatigue_system:
+            self._next_fatigue_time = time.time() + random.uniform(
+                self._cfg.fatigue_interval_min,
+                self._cfg.fatigue_interval_max,
+            )
+
+    def _schedule_micro_break(self) -> None:
+        if self._cfg.use_fatigue_system and self._cfg.use_micro_breaks:
+            self._next_micro_break_time = time.time() + random.uniform(
+                self._cfg.micro_break_interval_min,
+                self._cfg.micro_break_interval_max,
+            )
+
+    def _maybe_take_break(self) -> bool:
+        if not self._cfg.use_fatigue_system:
+            return False
+
+        now = time.time()
+        fatigue_due = now >= self._next_fatigue_time
+        micro_due = self._cfg.use_micro_breaks and now >= self._next_micro_break_time
+
+        if fatigue_due:
+            self._break_duration = random.uniform(
+                self._cfg.fatigue_duration_min,
+                self._cfg.fatigue_duration_max,
+            )
+            self._break_is_micro = False
+            self._transition_to(BotState.FATIGUE_BREAK)
+            return True
+
+        if micro_due:
+            self._break_duration = random.uniform(
+                self._cfg.micro_break_duration_min,
+                self._cfg.micro_break_duration_max,
+            )
+            self._break_is_micro = True
+            self._transition_to(BotState.MICRO_BREAK)
+            return True
+
+        return False
 
     def _randomize_delay(self, base_delay: float) -> float:
         """Sabit delay'e ±% insansı gürültü ekler (Anti-Cheat)."""
@@ -717,8 +811,16 @@ class BotLogic:
 
     def _transition_to(self, new_state: BotState) -> None:
         """Durum değiştirir ve zamanlayıcıyı sıfırlar."""
+        old_state = self.state
         self.state = new_state
         self._state_start_time = time.time()
+
+        if old_state == BotState.POST_CATCH and new_state in (
+            BotState.PREPARE, BotState.FATIGUE_BREAK, BotState.MICRO_BREAK
+        ):
+            if self._cycle_start_time is not None:
+                self._cycle_durations.append(time.time() - self._cycle_start_time)
+                self._cycle_start_time = None
         
         if new_state in (BotState.IDLE, BotState.WAITING):
             self._current_hooked_fish = None
@@ -768,6 +870,7 @@ class BotLogic:
         elif new_state == BotState.CAST:
             self._cast_done = False
             self._cast_pressed = False
+            self._cycle_start_time = time.time()
         elif new_state == BotState.WAITING:
             self._consecutive_circle_count = 0
             self._checked_bait_error = False

@@ -87,6 +87,8 @@ class BotLogic:
         
         # Dinamik yem tuşu kaydırması
         self._bait_slot_offset: int = 0
+        # Yem tuşu sırası: 1,2,3,4 → F1,F2,F3,F4 → tekrar 1
+        self._bait_keys: list[str] = ["1", "2", "3", "4", "f1", "f2", "f3", "f4"]
         
         # Karşılaşılan balıkların sayacı (GUI için)
         self.encountered_fishes: dict[str, int] = {}
@@ -104,6 +106,7 @@ class BotLogic:
         self.state = BotState.PREPARE
         self._state_start_time = time.time()
         self._click_count_in_minigame = 0
+        self._bait_slot_offset = 0  # Her yeni başlatmada yem döngüsünü başa al (1'den başla)
         
         self._session_start_time = time.time()
         self._last_yabbie_time = None
@@ -166,13 +169,9 @@ class BotLogic:
                         status_msg = "Minik Balik yeme takildi"
 
                 if not bait_clicked:
-                    # Yem bittiğinde tetiklenen offset ile tuşu belirle (1 -> 2 -> 3 -> 4 -> 1)
-                    try:
-                        base_key = int(self._cfg.key_bait)
-                        current_bait_key = str(base_key + self._bait_slot_offset)
-                    except ValueError:
-                        current_bait_key = self._cfg.key_bait
-
+                    # Yem sırasından tuşu al: 1→2→3→4→f1→f2→f3→f4→1...
+                    idx = self._bait_slot_offset % len(self._bait_keys)
+                    current_bait_key = self._bait_keys[idx]
                     self._clicker.press_key(current_bait_key)
                     status_msg = f"Hazirlik: Normal Yem takildi (Tus: {current_bait_key})"
 
@@ -247,9 +246,11 @@ class BotLogic:
                         chat_norm = raw_chat.lower().replace('ü', 'u').replace('ö', 'o').replace('ı', 'i').replace('ş', 's').replace('ğ', 'g').replace('ç', 'c').replace('i̇', 'i')
                         # Oyun "Önce yemi çengele geçir." uyarısı verdiyse yem bitmiştir!
                         if "once yemi" in chat_norm or "cengele gecir" in chat_norm:
-                            self._bait_slot_offset = (self._bait_slot_offset + 1) % 4
+                            self._bait_slot_offset = (self._bait_slot_offset + 1) % len(self._bait_keys)
+                            idx = self._bait_slot_offset % len(self._bait_keys)
+                            next_key = self._bait_keys[idx]
                             self._transition_to(BotState.PREPARE)
-                            status_msg = f"Yem bitti! Tus degistiriliyor (+{self._bait_slot_offset})"
+                            status_msg = f"Yem bitti! Sonraki yem: {next_key}"
                             return False, status_msg
 
             # ── Idle Mouse Hareketi (İnsan sıkılmış gibi) ──

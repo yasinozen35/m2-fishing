@@ -435,9 +435,14 @@ class BotLogic:
                         minigame_still_active = False
                         if self._capture is not None and detector is not None:
                             verify_frame = self._capture.grab_frame()
-                            verify_det = detector.detect(verify_frame)
-                            if verify_det.circle is not None:
-                                minigame_still_active = True
+                            cached_circle = detector._cached_circle
+                            if cached_circle is not None:
+                                # Hızlı ve yüksek güvenilirlikli çember doğrulaması kullan (HoughCircles'ın tek karede ıskalama ihtimaline karşı)
+                                minigame_still_active = detector._verify_cached_circle(verify_frame, cached_circle)
+                            else:
+                                verify_det = detector.detect(verify_frame)
+                                if verify_det.circle is not None:
+                                    minigame_still_active = True
                                 
                         if minigame_still_active:
                             # İptal et (ESC tuşu) insani basma süresiyle

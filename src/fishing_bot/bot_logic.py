@@ -86,6 +86,8 @@ class BotLogic:
         self._reaction_delay: float = 0.0       # Bu tıklama için random reaksiyon süresi
         self._fish_entered_safe_at: float = 0.0  # Balık safe zone'a ilk girdiği an
         self._fish_was_inside: bool = False      # Önceki frame'de balık içerde miydi?
+        self._last_click_pos: tuple[int, int] | None = None
+        self._last_click_time_minigame: float = 0.0
         
         # Dinamik yem tuşu kaydırması
         self._bait_slot_offset: int = 0
@@ -111,6 +113,8 @@ class BotLogic:
         self._click_count_in_minigame = 0
         self._bait_slot_offset = 0  # Her yeni başlatmada yem döngüsünü başa al (1'den başla)
         self._last_bait_switch_time = 0.0
+        self._last_click_pos = None
+        self._last_click_time_minigame = 0.0
         
         self._session_start_time = time.time()
         self._last_yabbie_time = None
@@ -517,6 +521,15 @@ class BotLogic:
                     current_y = detection.fish.center_y
                     now = time.time()
 
+                    # ── TIKLAMA SONRASI SPLASH GÜRÜLTÜSÜ FİLTRESİ (Yeni) ──
+                    # Hızlı modlarda tıklama sonrası oluşan su sıçraması (splash) efektini
+                    # balık sanıp üst üste aynı bölgeye tıklamasını önlemek için son tıklama bölgesini kısa süre kör nokta yap.
+                    if self._last_click_pos is not None and (now - self._last_click_time_minigame < 0.22):
+                        dist_to_last = math.hypot(current_x - self._last_click_pos[0], current_y - self._last_click_pos[1])
+                        if dist_to_last < 30:
+                            status_msg = f"MINIGAME: Tıklama sonrası splash gürültüsü engellendi (mesafe={dist_to_last:.1f}px)"
+                            return False, status_msg
+
                     # Pozisyon geçmişine ekle (son 5 frame)
                     self._fish_pos_history.append((current_x, current_y, now))
 
@@ -679,6 +692,8 @@ class BotLogic:
                         if self._clicker.fast_click_at(target_x, target_y, duration=move_duration):
                             clicked = True
                             self._click_count_in_minigame += 1
+                            self._last_click_pos = (target_x, target_y)
+                            self._last_click_time_minigame = time.time()
 
                             # ── Tıklama sonrası: reaksiyonu sıfırla ──
                             # Her tıklama yeni bir "görsel karar" gerektirir

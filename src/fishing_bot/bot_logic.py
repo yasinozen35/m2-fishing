@@ -487,7 +487,17 @@ class BotLogic:
 
             # Timeout (balık vurmadıysa veya kaçtıysa)
             if elapsed > self._cfg.timeout_waiting_fish:
+                # Fallback: Yem bitmiş ama chat OCR okuyamamış/ayarlanmamış olabilir.
+                # Kilitlenmeyi önlemek için yem slotunu bir sonrakine kaydır.
+                self._bait_slot_offset = (self._bait_slot_offset + 1) % len(self._bait_keys)
+                self._last_bait_switch_time = now
+                self._bait_error_detected_at = 0.0
+                idx = self._bait_slot_offset % len(self._bait_keys)
+                next_key = self._bait_keys[idx]
+                
                 self._transition_to(BotState.POST_CATCH)
+                status_msg = f"Timeout! Sonraki yem denenecek: {next_key}"
+                return False, status_msg
 
         elif self.state == BotState.MINIGAME:
             if getattr(self, "_current_hooked_fish", None) == "Yabbie Yengeci" and getattr(self._cfg, "leave_to_me_yabbie", False):

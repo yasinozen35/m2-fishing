@@ -418,9 +418,11 @@ class Detector:
         area_score = max(0.0, 1.0 - area_deviation)
 
         # ── Şekil Puanı ──
-        # Balık uzun bir cisimdir. width/height oranı yüksekse balık ihtimali yüksek.
-        if h > 0:
-            aspect_ratio = w / h
+        # Balık uzun bir cisimdir. Uzun kenarın kısa kenara oranı yüksekse balık ihtimali yüksek.
+        # w/h yerine max(w, h)/min(w, h) kullanılarak rotasyondan (dikey/yatay duruş) bağımsız hale getirilir.
+        min_dim = min(w, h)
+        if min_dim > 0:
+            aspect_ratio = max(w, h) / min_dim
             if 1.8 <= aspect_ratio <= 5.0:
                 shape_score = 1.0  # İdeal balık şekli
             elif 1.2 <= aspect_ratio < 1.8:

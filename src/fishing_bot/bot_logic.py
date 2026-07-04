@@ -437,8 +437,16 @@ class BotLogic:
                             verify_frame = self._capture.grab_frame()
                             cached_circle = detector._cached_circle
                             if cached_circle is not None:
-                                # Hızlı ve yüksek güvenilirlikli çember doğrulaması kullan (HoughCircles'ın tek karede ıskalama ihtimaline karşı)
-                                minigame_still_active = detector._verify_cached_circle(verify_frame, cached_circle)
+                                # Üçlü doğrulama: Çeper beyazlığı kontrolü OR İç su rengi kontrolü (Farklı arayüz renkleri için)
+                                border_ok = detector._verify_cached_circle(verify_frame, cached_circle)
+                                water_ok = detector._verify_circle_interior(verify_frame, cached_circle)
+                                if border_ok or water_ok:
+                                    minigame_still_active = True
+                                else:
+                                    # Fallback: Yeniden Hough tespiti dene
+                                    verify_det = detector.detect(verify_frame)
+                                    if verify_det.circle is not None:
+                                        minigame_still_active = True
                             else:
                                 verify_det = detector.detect(verify_frame)
                                 if verify_det.circle is not None:

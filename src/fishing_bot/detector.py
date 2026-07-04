@@ -375,12 +375,18 @@ class Detector:
         if best_contour is None:
             return None
 
-        # Bounding box'tan vücut merkezini hesapla
-        # Yatayda bounding box ortası, DİKEYDE config'den gelen offset
-        # Düşük offset = kafaya yakın, Yüksek offset = kuyruğa yakın
-        x, y, w, h = cv2.boundingRect(best_contour)
-        cx = x + w // 2
-        cy = y + int(h * self._fish_cfg.fish_body_offset_y)
+        # Rotasyon-uyumlu gerçek vücut merkezini hesapla (Moments / Centroid)
+        # Bounding box yerine Image Moments kullanarak balığın dönüş yönünden bağımsız
+        # olarak tam kütle merkezini hedefleriz (böylece kuyruk yerine gövdeye tıklar).
+        M = cv2.moments(best_contour)
+        if M["m00"] != 0:
+            cx = int(M["m10"] / M["m00"])
+            cy = int(M["m01"] / M["m00"])
+        else:
+            # Fallback: Bounding box merkezi
+            x, y, w, h = cv2.boundingRect(best_contour)
+            cx = x + w // 2
+            cy = y + h // 2
 
         return Fish(
             center_x=cx,

@@ -156,6 +156,12 @@ from fishing_bot.config import HumanConfig, CaptureConfig
 pyautogui.FAILSAFE = False      # Sol üst köşeye gidince program çökmesin (Oyunlarda sık olur).
 pyautogui.PAUSE = 0.0           # Otomatik bekleme yok (biz kendimiz yönetiyoruz).
 
+try:
+    import pydirectinput
+    pydirectinput.PAUSE = 0.0
+except Exception:
+    pass
+
 
 class HumanClicker:
     """İnsan benzeri tıklama motoru."""

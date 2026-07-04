@@ -68,6 +68,12 @@ if sys.platform == "win32":
         except Exception:
             pass
 
+        # ── Windows Timer Resolution Ayarı (1ms precision) ──
+        try:
+            ctypes.windll.winmm.timeBeginPeriod(1)
+        except Exception:
+            pass
+
     except ImportError:
         pass
 

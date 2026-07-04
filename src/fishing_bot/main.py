@@ -74,6 +74,13 @@ def _init_platform() -> None:
         except Exception:
             pass
 
+        # ── Windows Timer Resolution Ayarı (1ms precision) ──
+        try:
+            import ctypes as _ctypes
+            _ctypes.windll.winmm.timeBeginPeriod(1)
+        except Exception:
+            pass
+
 _init_platform()
 
 

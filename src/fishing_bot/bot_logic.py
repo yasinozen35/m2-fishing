@@ -56,6 +56,8 @@ class BotLogic:
         self._click_count_in_minigame = 0
         self._prepare_action_done = False
         self._postcatch_action_done = False
+        self._inventory_checked = False
+        self._inventory_open_retries = 0
 
         self._next_fatigue_time = 0.0
         self._next_micro_break_time = 0.0
@@ -152,6 +154,39 @@ class BotLogic:
             status_msg = "Bot Durduruldu"
 
         elif self.state == BotState.PREPARE:
+            # Bekleme süresi doldu mu?
+            if now < self._block_until:
+                status_msg = f"Hazirlik: Bekleniyor... ({self._block_until - now:.1f}s)"
+                return False, status_msg
+
+            # Envanter açma kontrolü
+            if self._cfg.use_inventory_check and self._cfg.inventory_region_w > 0 and self._cfg.inventory_region_h > 0:
+                if not getattr(self, "_inventory_checked", False):
+                    inv_region = {
+                        'top': self._cfg.inventory_region_y,
+                        'left': self._cfg.inventory_region_x,
+                        'width': self._cfg.inventory_region_w,
+                        'height': self._cfg.inventory_region_h
+                    }
+                    inv_text = self._read_ocr_region(inv_region)
+                    inv_text_norm = self._normalize_tr(inv_text)
+                    
+                    if "envanter" not in inv_text_norm and "inventory" not in inv_text_norm:
+                        retries = getattr(self, "_inventory_open_retries", 0)
+                        if retries < 3:
+                            self._inventory_open_retries = retries + 1
+                            self._clicker.press_key('i')
+                            self._block_until = now + 0.5
+                            status_msg = f"Envanter kapali, aciliyor (Deneme {self._inventory_open_retries}/3)..."
+                            return False, status_msg
+                        else:
+                            # 3 deneme de başarısız oldu, kilitlenmeyi önlemek için geçiyoruz.
+                            self._inventory_checked = True
+                            self._inventory_open_retries = 0
+                    else:
+                        self._inventory_checked = True
+                        self._inventory_open_retries = 0
+
             # Non-blocking: sadece bu state'e ilk girildiğinde aksiyonu yap
             if not getattr(self, "_prepare_action_done", False):
                 self._prepare_action_done = True
@@ -177,10 +212,6 @@ class BotLogic:
 
                 # Yem sonrası bekleme — olta atmak için (config'den ayarlanabilir)
                 self._block_until = now + self._randomize_delay(self._cfg.delay_after_bait)
-
-            # Yem takma sonrası bekleme süresi doldu mu?
-            if now < self._block_until:
-                status_msg = f"Hazirlik: Bekleniyor... ({self._block_until - now:.1f}s)"
                 return False, status_msg
 
             # Zırh trick POST_CATCH'e taşındı — minigame biter bitmez yapılıyor
@@ -864,6 +895,8 @@ class BotLogic:
             self._catch_streak += 1
         elif new_state == BotState.PREPARE:
             self._prepare_action_done = False
+            self._inventory_checked = False
+            self._inventory_open_retries = 0
         elif new_state == BotState.POST_CATCH:
             self._postcatch_action_done = False
             self._postcatch_target_delay = 0.0  # Her seferinde yeni rastgele değer
@@ -875,3 +908,51 @@ class BotLogic:
         elif new_state == BotState.WAITING:
             self._consecutive_circle_count = 0
             self._checked_bait_error = False
+
+    def _read_ocr_region(self, region: dict) -> str:
+        """Belirli bir ekran bölgesini yakalar ve OCR ile okur."""
+        import mss
+        import cv2
+        import numpy as np
+        import pytesseract
+        import os
+
+        # Windows Tesseract path check
+        default_path = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+        if os.path.exists(default_path):
+            pytesseract.pytesseract.tesseract_cmd = default_path
+            
+        project_dir = os.path.dirname(os.path.abspath(__file__))
+        tessdata_dir = os.path.join(project_dir, 'tessdata')
+        if os.path.exists(os.path.join(tessdata_dir, 'tur.traineddata')):
+            os.environ['TESSDATA_PREFIX'] = tessdata_dir
+
+        try:
+            with mss.mss() as sct:
+                screenshot = sct.grab(region)
+                img = np.array(screenshot)
+                
+            if img.size == 0:
+                return ""
+                
+            # Scale image x2
+            img_scaled = cv2.resize(img, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+            gray = cv2.cvtColor(img_scaled, cv2.COLOR_BGRA2GRAY)
+            _, thresh = cv2.threshold(gray, 120, 255, cv2.THRESH_BINARY)
+            
+            config_to_use = '--psm 6'
+            text = pytesseract.image_to_string(thresh, lang='tur+eng', config=config_to_use)
+            return text.strip()
+        except Exception:
+            try:
+                text = pytesseract.image_to_string(thresh, lang='eng', config=config_to_use)
+                return text.strip()
+            except Exception:
+                return ""
+
+    def _normalize_tr(self, text: str) -> str:
+        replacements = {'ü': 'u', 'ö': 'o', 'ı': 'i', 'ş': 's', 'ğ': 'g', 'ç': 'c', 'i̇': 'i'}
+        text = text.lower()
+        for k, v in replacements.items():
+            text = text.replace(k, v)
+        return text

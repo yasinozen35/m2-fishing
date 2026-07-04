@@ -195,6 +195,12 @@ class AutoBotConfig:
     chat_region_w: int = 400
     chat_region_h: int = 200
     
+    use_inventory_check: bool = True
+    inventory_region_x: int = 0
+    inventory_region_y: int = 0
+    inventory_region_w: int = 0
+    inventory_region_h: int = 0
+    
     # ── Auto Mod Ayarları ──
     auto_mode_min_mins: int = 3
     auto_mode_max_mins: int = 8
@@ -296,6 +302,11 @@ class Config:
             "chat_region_y": self.autobot.chat_region_y,
             "chat_region_w": self.autobot.chat_region_w,
             "chat_region_h": self.autobot.chat_region_h,
+            "use_inventory_check": self.autobot.use_inventory_check,
+            "inventory_region_x": self.autobot.inventory_region_x,
+            "inventory_region_y": self.autobot.inventory_region_y,
+            "inventory_region_w": self.autobot.inventory_region_w,
+            "inventory_region_h": self.autobot.inventory_region_h,
             # Human — reaksiyon & tıklama
             "reaction_min": self.human.reaction_min,
             "reaction_max": self.human.reaction_max,
@@ -380,6 +391,11 @@ class Config:
                     self.autobot.chat_region_y = data.get("chat_region_y", self.autobot.chat_region_y)
                     self.autobot.chat_region_w = data.get("chat_region_w", self.autobot.chat_region_w)
                     self.autobot.chat_region_h = data.get("chat_region_h", self.autobot.chat_region_h)
+                    self.autobot.use_inventory_check = data.get("use_inventory_check", self.autobot.use_inventory_check)
+                    self.autobot.inventory_region_x = data.get("inventory_region_x", self.autobot.inventory_region_x)
+                    self.autobot.inventory_region_y = data.get("inventory_region_y", self.autobot.inventory_region_y)
+                    self.autobot.inventory_region_w = data.get("inventory_region_w", self.autobot.inventory_region_w)
+                    self.autobot.inventory_region_h = data.get("inventory_region_h", self.autobot.inventory_region_h)
                     # Human — reaksiyon & tıklama
                     self.human.reaction_min = data.get("reaction_min", self.human.reaction_min)
                     self.human.reaction_max = data.get("reaction_max", self.human.reaction_max)

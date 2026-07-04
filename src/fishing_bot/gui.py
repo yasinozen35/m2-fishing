@@ -496,6 +496,7 @@ class FishingBotGUI(ctk.CTk):
         # Tüm toggle'ları varsayılana döndür
         self.seg_targeting.set("Organik (Mouse Akıcı)")
         self.switch_armor.deselect()
+        self.switch_use_inventory_check.select()
         self.switch_fatigue.select()
         self.switch_micro_break.select()
         self.switch_trash.select()
@@ -567,6 +568,16 @@ class FishingBotGUI(ctk.CTk):
             self.lbl_armor_pos.configure(text=f"Zırh Konumu: X={c.autobot.armor_x}, Y={c.autobot.armor_y}")
         else:
             self.lbl_armor_pos.configure(text="Zırh Konumu: Ayarlanmadı")
+
+        # Envanter switch'i + konum label'ı
+        if c.autobot.use_inventory_check:
+            self.switch_use_inventory_check.select()
+        else:
+            self.switch_use_inventory_check.deselect()
+        if c.autobot.inventory_region_w > 0 and c.autobot.inventory_region_h > 0:
+            self.lbl_inventory_region.configure(text=f"Envanter Bölgesi: X={c.autobot.inventory_region_x}, Y={c.autobot.inventory_region_y}, W={c.autobot.inventory_region_w}, H={c.autobot.inventory_region_h}")
+        else:
+            self.lbl_inventory_region.configure(text="Envanter Bölgesi: Ayarlanmadı")
 
         # Otonom toggle'lar
         if c.human.targeting_mode == "terminator":
@@ -655,6 +666,23 @@ class FishingBotGUI(ctk.CTk):
         self.btn_set_armor.pack(pady=5)
 
         ctk.CTkLabel(tab, text="Not: Butona basınca 3 saniye içinde mouse'u\nenvanterdeki zırhın üstüne götürün.", text_color="gray").pack(pady=5)
+
+        # Envanter Durum Kontrolü
+        ctk.CTkLabel(tab, text="Envanter Durum Kontrolü (Minigame Öncesi)", font=ctk.CTkFont(weight="bold")).pack(pady=(15, 5))
+        
+        self.switch_use_inventory_check = ctk.CTkSwitch(tab, text="Envanter Kontrolü Aktif", command=self._on_extras_toggle)
+        self.switch_use_inventory_check.pack(pady=5)
+        
+        inv_text = "Envanter Bölgesi: Ayarlanmadı"
+        if self.config.autobot.inventory_region_w > 0 and self.config.autobot.inventory_region_h > 0:
+            inv_text = f"Envanter Bölgesi: X={self.config.autobot.inventory_region_x}, Y={self.config.autobot.inventory_region_y}, W={self.config.autobot.inventory_region_w}, H={self.config.autobot.inventory_region_h}"
+        self.lbl_inventory_region = ctk.CTkLabel(tab, text=inv_text)
+        self.lbl_inventory_region.pack(pady=5)
+        
+        self.btn_set_inventory = ctk.CTkButton(tab, text="📍 Envanter Bölgesini Seç", command=self.start_inventory_region_selection)
+        self.btn_set_inventory.pack(pady=5)
+        
+        ctk.CTkLabel(tab, text="Not: Butona bastıktan sonra ekrandan envanter başlığını fareyle sürükleyip seçin\nve ENTER tuşuna basarak onaylayın.", text_color="gray", font=ctk.CTkFont(size=11)).pack(pady=5)
 
         # Otonom İnsanlaştırma ve Envanter
         ctk.CTkLabel(tab, text="Yapay Zeka & Organik Davranış", font=ctk.CTkFont(weight="bold")).pack(pady=(15, 5))
@@ -932,6 +960,7 @@ class FishingBotGUI(ctk.CTk):
         c = self.config
         c.human.targeting_mode = "terminator" if self.seg_targeting.get() == "Terminatör (Mouse Işınlanır)" else "organic"
         c.autobot.use_armor_trick = self.switch_armor.get() == 1
+        c.autobot.use_inventory_check = self.switch_use_inventory_check.get() == 1
         c.autobot.use_fatigue_system = self.switch_fatigue.get() == 1
         c.autobot.use_micro_breaks = self.switch_micro_break.get() == 1
         c.autobot.auto_drop_trash = self.switch_trash.get() == 1
@@ -1267,6 +1296,61 @@ class FishingBotGUI(ctk.CTk):
             self.log(f"Secim sirasinda hata: {e}")
         finally:
             self.after(0, lambda: self.btn_set_chat.configure(state="normal"))
+
+    def start_inventory_region_selection(self):
+        import threading
+        self.btn_set_inventory.configure(state="disabled")
+        self.log("Envanter bolgesi secimi baslatildi. Ekranda cizip ENTER'a basin.")
+        threading.Thread(target=self._run_inventory_calibration, daemon=True).start()
+
+    def _run_inventory_calibration(self):
+        try:
+            import mss
+            import numpy as np
+            import cv2
+            with mss.mss() as sct:
+                monitor = sct.monitors[1]
+                raw = sct.grab(monitor)
+                full_screen = np.array(raw, dtype=np.uint8)[:, :, :3]
+            
+            h, w = full_screen.shape[:2]
+            display_scale = 1.0
+            max_display = 1200
+            if w > max_display:
+                display_scale = max_display / w
+                display = cv2.resize(full_screen, (int(w * display_scale), int(h * display_scale)))
+            else:
+                display = full_screen
+                
+            # OpenCV penceresini en öne getirme hilesi
+            cv2.namedWindow("Envanter Bolgesini Secin (ENTER=Onayla, C=Iptal)", cv2.WINDOW_NORMAL)
+            cv2.setWindowProperty("Envanter Bolgesini Secin (ENTER=Onayla, C=Iptal)", cv2.WND_PROP_TOPMOST, 1)
+            
+            roi = cv2.selectROI("Envanter Bolgesini Secin (ENTER=Onayla, C=Iptal)", display, fromCenter=False, showCrosshair=True)
+            cv2.destroyAllWindows()
+            
+            if roi != (0, 0, 0, 0):
+                x, y, rw, rh = roi
+                real_x = int(x / display_scale)
+                real_y = int(y / display_scale)
+                real_w = int(rw / display_scale)
+                real_h = int(rh / display_scale)
+                
+                self.config.autobot.inventory_region_x = real_x
+                self.config.autobot.inventory_region_y = real_y
+                self.config.autobot.inventory_region_w = real_w
+                self.config.autobot.inventory_region_h = real_h
+                self.config.save_calibration()
+                
+                self.after(0, lambda: self.lbl_inventory_region.configure(text=f"Envanter Bölgesi: X={real_x}, Y={real_y}, W={real_w}, H={real_h}"))
+                self.log(f"Envanter bolgesi kaydedildi: W={real_w}, H={real_h}")
+            else:
+                self.log("Envanter bolgesi secimi iptal edildi.")
+                
+        except Exception as e:
+            self.log(f"Secim sirasinda hata: {e}")
+        finally:
+            self.after(0, lambda: self.btn_set_inventory.configure(state="normal"))
 
 def launch_gui():
     import platform

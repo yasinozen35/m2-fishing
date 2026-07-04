@@ -89,6 +89,7 @@ class BotLogic:
         
         # Dinamik yem tuşu kaydırması
         self._bait_slot_offset: int = 0
+        self._last_bait_switch_time: float = 0.0
         # Yem tuşu sırası: 1,2,3,4 → F1,F2,F3,F4 → tekrar 1
         self._bait_keys: list[str] = ["1", "2", "3", "4", "f1", "f2", "f3", "f4"]
         
@@ -109,6 +110,7 @@ class BotLogic:
         self._state_start_time = time.time()
         self._click_count_in_minigame = 0
         self._bait_slot_offset = 0  # Her yeni başlatmada yem döngüsünü başa al (1'den başla)
+        self._last_bait_switch_time = 0.0
         
         self._session_start_time = time.time()
         self._last_yabbie_time = None
@@ -268,8 +270,8 @@ class BotLogic:
                     self._cfg.chat_region_w, self._cfg.chat_region_h
                 )
                 
-            # ── YEM BİTTİ KONTROLÜ (Oltayı attıktan ~1.2 sn sonra SADECE 1 KERE chat'e bak) ──
-            if elapsed > 1.2 and not getattr(self, "_checked_bait_error", False):
+            # ── YEM BİTTİ KONTROLÜ (Oltayı attıktan ~1.2 sn sonra SADECE 1 KERE chat'e bak ve son yem değişiminden sonra 10 sn geçmiş olmalı) ──
+            if elapsed > 1.2 and not getattr(self, "_checked_bait_error", False) and (now - self._last_bait_switch_time > 10.0):
                 self._checked_bait_error = True
                 if self._cfg.chat_region_w > 0 and self._cfg.chat_region_h > 0:
                     raw_chat = self._chat_reader.get_raw_chat()
@@ -278,6 +280,7 @@ class BotLogic:
                         # Oyun "Önce yemi çengele geçir." uyarısı verdiyse yem bitmiştir!
                         if "once yemi" in chat_norm or "cengele gecir" in chat_norm:
                             self._bait_slot_offset = (self._bait_slot_offset + 1) % len(self._bait_keys)
+                            self._last_bait_switch_time = now
                             idx = self._bait_slot_offset % len(self._bait_keys)
                             next_key = self._bait_keys[idx]
                             self._transition_to(BotState.PREPARE)

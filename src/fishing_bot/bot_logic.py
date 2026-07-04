@@ -649,6 +649,7 @@ class BotLogic:
                             self._fish_was_inside = False
                             self._fish_entered_safe_at = 0.0
                             self._reaction_delay = 0.0
+                            self._fish_pos_history.clear()
 
                             # ── İnsansı Ritim: tıklamadan SONRA cooldown'u ayarla ──
                             if self._click_rhythm and self._click_rhythm_idx < len(self._click_rhythm):

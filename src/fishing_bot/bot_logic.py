@@ -92,6 +92,7 @@ class BotLogic:
         # Dinamik yem tuşu kaydırması
         self._bait_slot_offset: int = 0
         self._last_bait_switch_time: float = 0.0
+        self._bait_error_detected_at: float = 0.0
         # Yem tuşu sırası: 1,2,3,4 → F1,F2,F3,F4 → tekrar 1
         self._bait_keys: list[str] = ["1", "2", "3", "4", "f1", "f2", "f3", "f4"]
         
@@ -113,6 +114,7 @@ class BotLogic:
         self._click_count_in_minigame = 0
         self._bait_slot_offset = 0  # Her yeni başlatmada yem döngüsünü başa al (1'den başla)
         self._last_bait_switch_time = 0.0
+        self._bait_error_detected_at = 0.0
         self._last_click_pos = None
         self._last_click_time_minigame = 0.0
         
@@ -199,8 +201,8 @@ class BotLogic:
 
                 # 1. Yem tak
                 bait_clicked = False
-                # Ekranda (envanterde) minik balık var mı kontrol et
-                if self._capture is not None and detector is not None:
+                # Ekranda (envanterde) minik balık var mı kontrol et (Sadece offset 0 iken)
+                if self._bait_slot_offset == 0 and self._capture is not None and detector is not None:
                     full_frame = self._capture.grab_full_frame()
                     baits = detector.detect_inventory_items(full_frame, item_type="bait")
                     if baits:
@@ -274,8 +276,8 @@ class BotLogic:
                     self._cfg.chat_region_w, self._cfg.chat_region_h
                 )
                 
-            # ── YEM BİTTİ KONTROLÜ (Oltayı attıktan ~1.2 sn sonra SADECE 1 KERE chat'e bak ve son yem değişiminden sonra 10 sn geçmiş olmalı) ──
-            if elapsed > 1.2 and not getattr(self, "_checked_bait_error", False) and (now - self._last_bait_switch_time > 10.0):
+            # ── YEM BİTTİ KONTROLÜ (Oltayı attıktan ~1.2 sn sonra SADECE 1 KERE chat'e bak ve son yem değişiminden sonra 5 sn geçmiş olmalı) ──
+            if elapsed > 1.2 and not getattr(self, "_checked_bait_error", False) and (now - self._last_bait_switch_time > 5.0):
                 self._checked_bait_error = True
                 if self._cfg.chat_region_w > 0 and self._cfg.chat_region_h > 0:
                     raw_chat = self._chat_reader.get_raw_chat()
@@ -283,13 +285,24 @@ class BotLogic:
                         chat_norm = raw_chat.lower().replace('ü', 'u').replace('ö', 'o').replace('ı', 'i').replace('ş', 's').replace('ğ', 'g').replace('ç', 'c').replace('i̇', 'i')
                         # Oyun "Önce yemi çengele geçir." uyarısı verdiyse yem bitmiştir!
                         if "once yemi" in chat_norm or "cengele gecir" in chat_norm:
-                            self._bait_slot_offset = (self._bait_slot_offset + 1) % len(self._bait_keys)
-                            self._last_bait_switch_time = now
-                            idx = self._bait_slot_offset % len(self._bait_keys)
-                            next_key = self._bait_keys[idx]
-                            self._transition_to(BotState.PREPARE)
-                            status_msg = f"Yem bitti! Sonraki yem: {next_key}"
-                            return False, status_msg
+                            self._bait_error_detected_at = now
+                            status_msg = "Yem hatasi algilandi! 5 saniye bekleniyor..."
+                            
+            # Yem hatası algılandıysa 5 saniye bekle ve sonraki yeme geç
+            if getattr(self, "_bait_error_detected_at", 0.0) > 0.0:
+                error_elapsed = now - self._bait_error_detected_at
+                if error_elapsed >= 5.0:
+                    self._bait_slot_offset = (self._bait_slot_offset + 1) % len(self._bait_keys)
+                    self._last_bait_switch_time = now
+                    self._bait_error_detected_at = 0.0
+                    idx = self._bait_slot_offset % len(self._bait_keys)
+                    next_key = self._bait_keys[idx]
+                    self._transition_to(BotState.PREPARE)
+                    status_msg = f"Yem hatasi suresi doldu! Sonraki yem: {next_key}"
+                    return False, status_msg
+                else:
+                    status_msg = f"Yem hatasi algilandi! Bekleniyor ({5.0 - error_elapsed:.1f}s)..."
+                    return False, status_msg
 
             # ── Idle Mouse Hareketi (İnsan sıkılmış gibi) ──
             # Her 3-7 saniyede bir fareyi hafifçe oynat
@@ -960,6 +973,7 @@ class BotLogic:
         elif new_state == BotState.WAITING:
             self._consecutive_circle_count = 0
             self._checked_bait_error = False
+            self._bait_error_detected_at = 0.0
 
     def _read_ocr_region(self, region: dict) -> str:
         """Belirli bir ekran bölgesini yakalar ve OCR ile okur."""

@@ -533,6 +533,13 @@ class BotLogic:
                         self._reaction_delay = 0.0
                         return False, status_msg
 
+                    # Cooldown aktifken reaksiyon süresini başlatma (anlık tıklama yarış durumunu önle)
+                    if not self._clicker.is_ready:
+                        self._fish_was_inside = False
+                        self._fish_entered_safe_at = 0.0
+                        self._reaction_delay = 0.0
+                        return False, "MINIGAME: Tıklama cooldown'u bekleniyor..."
+
                     # ── İNSANSI REAKSİYON GECİKMESİ SİSTEMİ (ANTI-CHEAT) ──
                     # Balık safe zone'a İLK girdiğinde zamanı kaydet.
                     # Her tıklama için yeni bir reaksiyon süresi belirle.

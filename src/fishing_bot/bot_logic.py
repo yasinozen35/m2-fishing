@@ -430,10 +430,23 @@ class BotLogic:
                         # İnsan okuma ve tepki verme süresi (Kullanıcı isteğiyle 1 sn yapıldı)
                         time.sleep(random.uniform(0.9, 1.2))
                         
-                        # İptal et (ESC tuşu) insani basma süresiyle
-                        self._clicker.press_key('esc', hold_min=0.10, hold_max=0.22)
+                        # ── ESC basmadan önce minigame'in hala aktif olduğunu doğrula! ──
+                        # Aksi halde minigame kapandıysa ESC tuşu oyun menüsünü açar.
+                        minigame_still_active = False
+                        if self._capture is not None and detector is not None:
+                            verify_frame = self._capture.grab_frame()
+                            verify_det = detector.detect(verify_frame)
+                            if verify_det.circle is not None:
+                                minigame_still_active = True
+                                
+                        if minigame_still_active:
+                            # İptal et (ESC tuşu) insani basma süresiyle
+                            self._clicker.press_key('esc', hold_min=0.10, hold_max=0.22)
+                            status_msg = f"İptal Edildi: {hooked_fish}"
+                        else:
+                            status_msg = f"İptal İptal Edildi (Minigame zaten kapanmış): {hooked_fish}"
+                            
                         self._transition_to(BotState.POST_CATCH)
-                        status_msg = f"İptal Edildi: {hooked_fish}"
                         return False, status_msg
 
                 self._transition_to(BotState.MINIGAME)

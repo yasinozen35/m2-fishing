@@ -36,6 +36,7 @@ class BotState(Enum):
     WAITING = auto()       # Dairenin belirmesini bekleme
     MINIGAME = auto()      # Balık yakalama mini-oyunu (3 tık)
     POST_CATCH = auto()    # Yakaladıktan sonra bekleme / envanter yönetimi
+    TUNA_POPUP = auto()    # Altın Ton Balığı arayüz seçimi (OCR)
     FATIGUE_BREAK = auto() # İnsan yorulması, AFK bekleme modu
     MICRO_BREAK = auto()   # Kısa telefona bakma molası
 
@@ -53,9 +54,9 @@ class BotLogic:
 
         self.successful_catches = 0
         self.total_casts = 0
-        self._click_count_in_minigame = 0
         self._prepare_action_done = False
         self._postcatch_action_done = False
+        self._tuna_popup_processed = False
         self._inventory_checked = False
         self._inventory_open_retries = 0
 
@@ -733,6 +734,22 @@ class BotLogic:
         elif self.state == BotState.POST_CATCH:
             status_msg = f"Toparlaniyor... ({int(self._cfg.delay_after_catch - elapsed)}s)"
             
+            # Altın Ton Balığı Kontrolü ve Seçim Penceresine Geçiş
+            if self._cfg.tuna_action != "Pasif" and not getattr(self, "_tuna_popup_processed", False):
+                tuna_detected = False
+                if getattr(self, "_current_hooked_fish", None) == "Altın ton balığı":
+                    tuna_detected = True
+                if not tuna_detected and self._cfg.chat_region_w > 0 and self._cfg.chat_region_h > 0:
+                    raw_chat = self._chat_reader.get_raw_chat()
+                    if raw_chat:
+                        chat_norm = self._normalize_tr(raw_chat)
+                        if "altin ton" in chat_norm or "ton baligi" in chat_norm:
+                            tuna_detected = True
+                if tuna_detected:
+                    self._tuna_popup_processed = True
+                    self._transition_to(BotState.TUNA_POPUP)
+                    return False, "Altın Ton Balığı yakalandı! Seçim penceresi bekleniyor..."
+
             if not getattr(self, "_postcatch_action_done", False):
                 self._postcatch_action_done = True
                 self._armor_trick_used = False
@@ -826,6 +843,95 @@ class BotLogic:
                 else:
                     self._schedule_fatigue()
                 self._transition_to(BotState.PREPARE)
+
+        elif self.state == BotState.TUNA_POPUP:
+            status_msg = f"Altin Ton Baligi Secimi Bekleniyor... ({10.0 - elapsed:.1f}s)"
+            
+            # Zaman aşımı kontrolü (10 saniye boyunca bulunamazsa iptal et/es geç)
+            if elapsed > 10.0:
+                self._transition_to(BotState.POST_CATCH)
+                self._postcatch_action_done = False # Post-catch işlemlerini çalıştırabilmesi için
+                return False, "Zaman aşımı! Altın Ton Balığı seçimi atlandı."
+
+            # Ekranda butonu ara
+            if self._capture is not None:
+                frame = self._capture.grab_frame()
+                if frame is not None and frame.size > 0:
+                    H, W, _ = frame.shape
+                    # Merkez bölgeyi kırp (ROI)
+                    crop_x1 = int(W * 0.2)
+                    crop_x2 = int(W * 0.8)
+                    crop_y1 = int(H * 0.2)
+                    crop_y2 = int(H * 0.8)
+                    cropped = frame[crop_y1:crop_y2, crop_x1:crop_x2]
+                    
+                    # OCR için ön işleme (2 kat büyüt, gri tonlama, threshold)
+                    import cv2
+                    import numpy as np
+                    import pytesseract
+                    import os
+                    
+                    # Windows Tesseract path check
+                    default_path = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+                    if os.path.exists(default_path):
+                        pytesseract.pytesseract.tesseract_cmd = default_path
+                        
+                    project_dir = os.path.dirname(os.path.abspath(__file__))
+                    tessdata_dir = os.path.join(project_dir, 'tessdata')
+                    if os.path.exists(os.path.join(tessdata_dir, 'tur.traineddata')):
+                        os.environ['TESSDATA_PREFIX'] = tessdata_dir
+                        
+                    try:
+                        img_scaled = cv2.resize(cropped, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+                        gray = cv2.cvtColor(img_scaled, cv2.COLOR_BGR2GRAY)
+                        _, thresh = cv2.threshold(gray, 120, 255, cv2.THRESH_BINARY)
+                        
+                        data = pytesseract.image_to_data(thresh, lang='tur+eng', config='--psm 6', output_type=pytesseract.Output.DICT)
+                        
+                        # Seçilen eylemi normalize et ve anahtar kelimeleri belirle
+                        action_norm = self._normalize_tr(self._cfg.tuna_action)
+                        keywords = []
+                        if "serbest" in action_norm:
+                            keywords = ["serbest", "birak"]
+                        elif "kes" in action_norm:
+                            keywords = ["kes"]
+                        elif "yem" in action_norm:
+                            keywords = ["yem", "kullan"]
+                            
+                        found_idx = -1
+                        for idx, text in enumerate(data['text']):
+                            w_norm = self._normalize_tr(text)
+                            if w_norm and any(k in w_norm for k in keywords):
+                                found_idx = idx
+                                break
+                                
+                        if found_idx != -1:
+                            # Kelimenin koordinatlarını hesapla
+                            sx = data['left'][found_idx]
+                            sy = data['top'][found_idx]
+                            sw = data['width'][found_idx]
+                            sh = data['height'][found_idx]
+                            
+                            # 2x ölçeklemeyi geri al
+                            cx = (sx + sw // 2) // 2
+                            cy = (sy + sh // 2) // 2
+                            
+                            # Kırpma alanını ekle -> local koordinat
+                            local_x = crop_x1 + cx
+                            local_y = crop_y1 + cy
+                            
+                            # Tıkla
+                            self._clicker.click_at(local_x, local_y)
+                            
+                            # Biraz bekle (popup kapansın)
+                            time.sleep(random.uniform(0.8, 1.2))
+                            
+                            # POST_CATCH durumuna dön, kalan envanter/zırh işleri devam etsin
+                            self._transition_to(BotState.POST_CATCH)
+                            self._postcatch_action_done = False # POST_CATCH eylemlerinin tetiklenmesi için
+                            return False, f"Altın Ton Balığı: '{self._cfg.tuna_action}' seçildi ve tıklandı."
+                    except Exception as e:
+                        pass
 
         return clicked, status_msg
 
@@ -931,6 +1037,7 @@ class BotLogic:
         
         if new_state in (BotState.IDLE, BotState.WAITING):
             self._current_hooked_fish = None
+            self._tuna_popup_processed = False
 
         if new_state == BotState.MINIGAME:
             self._last_minigame_end_time = 0.0  # Watchdog sıfırla

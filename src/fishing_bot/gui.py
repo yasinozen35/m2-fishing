@@ -908,6 +908,20 @@ class FishingBotGUI(ctk.CTk):
         else:
             self.switch_use_fish_ocr.deselect()
 
+        # Altın Ton Balığı Eylemi Seçimi
+        f_tuna = ctk.CTkFrame(tab)
+        f_tuna.pack(fill="x", padx=20, pady=(5, 10))
+        
+        ctk.CTkLabel(f_tuna, text="🎣 Altın Ton Balığı Eylemi:", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=(10, 5), pady=5)
+        
+        self.opt_tuna_action = ctk.CTkOptionMenu(
+            f_tuna,
+            values=["Pasif", "Serbest Bırak!", "Kes!", "Yem olarak kullan!"],
+            command=lambda v: self._on_extras_toggle()
+        )
+        self.opt_tuna_action.pack(side="left", padx=5, pady=5)
+        self.opt_tuna_action.set(c.tuna_action if hasattr(c, "tuna_action") else "Pasif")
+
         # Özel Balık Ekleme
         f_add_fish = ctk.CTkFrame(tab)
         f_add_fish.pack(fill="x", padx=20, pady=5)
@@ -986,6 +1000,8 @@ class FishingBotGUI(ctk.CTk):
             
         if hasattr(self, 'switch_use_fish_ocr'):
             c.autobot.use_fish_ocr = self.switch_use_fish_ocr.get() == 1
+        if hasattr(self, 'opt_tuna_action'):
+            c.autobot.tuna_action = self.opt_tuna_action.get()
             
         c.save_calibration()
         self.log("Ayarlar kaydedildi.")

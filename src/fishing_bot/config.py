@@ -190,6 +190,7 @@ class AutoBotConfig:
     ignored_fishes: list = field(default_factory=list) # İptal edilecek balıklar listesi
     custom_fishes: list = field(default_factory=list)
     use_fish_ocr: bool = True
+    tuna_action: str = 'Pasif'                  # Altın Ton Balığı seçimi: Pasif, Serbest Bırak!, Kes!, Yem olarak kullan!
     chat_region_x: int = 0
     chat_region_y: int = 0
     chat_region_w: int = 400
@@ -298,6 +299,7 @@ class Config:
             "ignored_fishes": self.autobot.ignored_fishes,
             "custom_fishes": self.autobot.custom_fishes,
             "use_fish_ocr": self.autobot.use_fish_ocr,
+            "tuna_action": self.autobot.tuna_action,
             "chat_region_x": self.autobot.chat_region_x,
             "chat_region_y": self.autobot.chat_region_y,
             "chat_region_w": self.autobot.chat_region_w,
@@ -387,6 +389,7 @@ class Config:
                     self.autobot.ignored_fishes = data.get("ignored_fishes", self.autobot.ignored_fishes)
                     self.autobot.custom_fishes = data.get("custom_fishes", self.autobot.custom_fishes)
                     self.autobot.use_fish_ocr = data.get("use_fish_ocr", self.autobot.use_fish_ocr)
+                    self.autobot.tuna_action = data.get("tuna_action", self.autobot.tuna_action)
                     self.autobot.chat_region_x = data.get("chat_region_x", self.autobot.chat_region_x)
                     self.autobot.chat_region_y = data.get("chat_region_y", self.autobot.chat_region_y)
                     self.autobot.chat_region_w = data.get("chat_region_w", self.autobot.chat_region_w)

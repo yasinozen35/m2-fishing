@@ -858,18 +858,25 @@ class BotLogic:
                 frame = self._capture.grab_frame()
                 if frame is not None and frame.size > 0:
                     H, W, _ = frame.shape
-                    # Merkez bölgeyi kırp (ROI)
-                    crop_x1 = int(W * 0.2)
-                    crop_x2 = int(W * 0.8)
-                    crop_y1 = int(H * 0.2)
-                    crop_y2 = int(H * 0.8)
+                    # Merkez bölgeyi kırp (ROI) - Daha geniş alan (%10 ile %90 arası)
+                    crop_x1 = int(W * 0.1)
+                    crop_x2 = int(W * 0.9)
+                    crop_y1 = int(H * 0.1)
+                    crop_y2 = int(H * 0.9)
                     cropped = frame[crop_y1:crop_y2, crop_x1:crop_x2]
                     
-                    # OCR için ön işleme (2 kat büyüt, gri tonlama, threshold)
+                    # OCR için ön işleme
                     import cv2
                     import numpy as np
                     import pytesseract
                     import os
+                    
+                    # Hata ayıklama için kırpılan ham görseli kaydet
+                    try:
+                        os.makedirs("images", exist_ok=True)
+                        cv2.imwrite("images/debug_tuna_crop.png", cropped)
+                    except Exception:
+                        pass
                     
                     # Windows Tesseract path check
                     default_path = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
@@ -882,11 +889,9 @@ class BotLogic:
                         os.environ['TESSDATA_PREFIX'] = tessdata_dir
                         
                     try:
+                        # 2 kat büyüt ve gri tonlamaya çevir
                         img_scaled = cv2.resize(cropped, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
                         gray = cv2.cvtColor(img_scaled, cv2.COLOR_BGR2GRAY)
-                        _, thresh = cv2.threshold(gray, 120, 255, cv2.THRESH_BINARY)
-                        
-                        data = pytesseract.image_to_data(thresh, lang='tur+eng', config='--psm 6', output_type=pytesseract.Output.DICT)
                         
                         # Seçilen eylemi normalize et ve anahtar kelimeleri belirle
                         action_norm = self._normalize_tr(self._cfg.tuna_action)
@@ -899,13 +904,50 @@ class BotLogic:
                             keywords = ["yem", "kullan"]
                             
                         found_idx = -1
-                        for idx, text in enumerate(data['text']):
-                            w_norm = self._normalize_tr(text)
-                            if w_norm and any(k in w_norm for k in keywords):
-                                found_idx = idx
-                                break
+                        data = None
+                        
+                        # ── STRATEJİ 1: Doğrudan Gri Tonlama (Kenar yumuşatmaları korur, en yüksek doğruluk) ──
+                        try:
+                            data = pytesseract.image_to_data(gray, lang='tur+eng', config='--psm 6', output_type=pytesseract.Output.DICT)
+                            for idx, text in enumerate(data['text']):
+                                w_norm = self._normalize_tr(text)
+                                if w_norm and any(k in w_norm for k in keywords):
+                                    found_idx = idx
+                                    break
+                        except Exception:
+                            pass
+                            
+                        # ── STRATEJİ 2: (Bulunamadıysa) Otsu Eşikleme (Otomatik Kontrast Eşiği) ──
+                        if found_idx == -1:
+                            _, thresh_otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                            try:
+                                cv2.imwrite("images/debug_tuna_thresh.png", thresh_otsu)
+                            except Exception:
+                                pass
+                            try:
+                                data = pytesseract.image_to_data(thresh_otsu, lang='tur+eng', config='--psm 6', output_type=pytesseract.Output.DICT)
+                                for idx, text in enumerate(data['text']):
+                                    w_norm = self._normalize_tr(text)
+                                    if w_norm and any(k in w_norm for k in keywords):
+                                        found_idx = idx
+                                        break
+                            except Exception:
+                                pass
                                 
-                        if found_idx != -1:
+                        # ── STRATEJİ 3: (Bulunamadıysa) Sabit 120 Eşikleme (Açık renkli yazılar için) ──
+                        if found_idx == -1:
+                            _, thresh_fixed = cv2.threshold(gray, 120, 255, cv2.THRESH_BINARY)
+                            try:
+                                data = pytesseract.image_to_data(thresh_fixed, lang='tur+eng', config='--psm 6', output_type=pytesseract.Output.DICT)
+                                for idx, text in enumerate(data['text']):
+                                    w_norm = self._normalize_tr(text)
+                                    if w_norm and any(k in w_norm for k in keywords):
+                                        found_idx = idx
+                                        break
+                            except Exception:
+                                pass
+                                
+                        if found_idx != -1 and data is not None:
                             # Kelimenin koordinatlarını hesapla
                             sx = data['left'][found_idx]
                             sy = data['top'][found_idx]

@@ -352,7 +352,8 @@ class BotLogic:
                         "Dere Alabalığı", "Kadife Balığı", "Kral Yengeci", "Altın Yüzük", "Kaçak Pelerin", 
                         "Ringa Balığı", "Gümüş Balığı", "Şiraz Balığı", "Sudak Balığı", "Altın Sudak", "Altın Sudak Balığı",
                         "Ot Sazanı", "Som Balığı", "Minik Balık", "Saç Boyası", "Alabalık", "Uskumru", 
-                        "Palamut", "Zargana", "Yabbie Yengeci", "Levrek", "Yayın Balığı", "Çopra", "Sazan", "Lüfer Balığı"
+                        "Palamut", "Zargana", "Yabbie Yengeci", "Levrek", "Yayın Balığı", "Çopra", "Sazan", "Lüfer Balığı",
+                        "Altın ton balığı"
                     ]
                     
                     # Kullanıcının eklediği özel balıkları ve iptal listesindekileri tanınan kelimelere dahil et
@@ -858,120 +859,121 @@ class BotLogic:
                 frame = self._capture.grab_frame()
                 if frame is not None and frame.size > 0:
                     H, W, _ = frame.shape
-                    # Merkez bölgeyi kırp (ROI) - Daha geniş alan (%10 ile %90 arası)
-                    crop_x1 = int(W * 0.1)
-                    crop_x2 = int(W * 0.9)
-                    crop_y1 = int(H * 0.1)
-                    crop_y2 = int(H * 0.9)
-                    cropped = frame[crop_y1:crop_y2, crop_x1:crop_x2]
                     
-                    # OCR için ön işleme
                     import cv2
                     import numpy as np
                     import pytesseract
                     import os
                     
-                    # Hata ayıklama için kırpılan ham görseli kaydet
-                    try:
-                        os.makedirs("images", exist_ok=True)
-                        cv2.imwrite("images/debug_tuna_crop.png", cropped)
-                    except Exception:
-                        pass
-                    
-                    # Windows Tesseract path check
-                    default_path = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-                    if os.path.exists(default_path):
-                        pytesseract.pytesseract.tesseract_cmd = default_path
+                    # Tesseract path check (Windows + macOS)
+                    tess_paths = [
+                        r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+                        r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+                        '/opt/homebrew/bin/tesseract',
+                        '/usr/local/bin/tesseract',
+                        '/usr/bin/tesseract'
+                    ]
+                    for path in tess_paths:
+                        if os.path.exists(path):
+                            pytesseract.pytesseract.tesseract_cmd = path
+                            break
                         
                     project_dir = os.path.dirname(os.path.abspath(__file__))
                     tessdata_dir = os.path.join(project_dir, 'tessdata')
                     if os.path.exists(os.path.join(tessdata_dir, 'tur.traineddata')):
                         os.environ['TESSDATA_PREFIX'] = tessdata_dir
                         
+                    # Seçilen eylemi normalize et ve anahtar kelimeleri belirle
+                    action_norm = self._normalize_tr(self._cfg.tuna_action)
+                    action_lower = action_norm.lower()
+                    keywords = []
+                    if "serbest" in action_lower:
+                        keywords = ["serbest", "birak"]
+                    elif "kes" in action_lower:
+                        keywords = ["kes"]
+                    elif "yem" in action_lower:
+                        keywords = ["yem", "kullan"]
+
+                    if not keywords:
+                        self._transition_to(BotState.POST_CATCH)
+                        self._postcatch_action_done = False
+                        return False, "Altın Ton Balığı eylemi 'Pasif' olduğundan seçim atlandı."
+
+                    # 3 Dikey Dilim (Üst, Orta, Alt seçenek şeritleri)
+                    # Genişlik (X) olarak oyun ekranının ortasındaki %60'lık alanı tarıyoruz (böylece sol/sağ gürültüleri elenir)
+                    x1 = int(W * 0.20)
+                    x2 = int(W * 0.80)
+                    
+                    slices = [
+                        {"name": "Serbest Birak", "y1": int(H * 0.33), "y2": int(H * 0.43)},
+                        {"name": "Kes", "y1": int(H * 0.44), "y2": int(H * 0.54)},
+                        {"name": "Yem Kullan", "y1": int(H * 0.55), "y2": int(H * 0.65)}
+                    ]
+                    
                     try:
-                        # 2 kat büyüt ve gri tonlamaya çevir
-                        img_scaled = cv2.resize(cropped, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
-                        gray = cv2.cvtColor(img_scaled, cv2.COLOR_BGR2GRAY)
+                        found_slice = None
                         
-                        # Seçilen eylemi normalize et ve anahtar kelimeleri belirle
-                        action_norm = self._normalize_tr(self._cfg.tuna_action)
-                        keywords = []
-                        if "serbest" in action_norm:
-                            keywords = ["serbest", "birak"]
-                        elif "kes" in action_norm:
-                            keywords = ["kes"]
-                        elif "yem" in action_norm:
-                            keywords = ["yem", "kullan"]
+                        for slc in slices:
+                            cropped = frame[slc["y1"]:slc["y2"], x1:x2]
                             
-                        found_idx = -1
-                        data = None
-                        
-                        # ── STRATEJİ 1: Doğrudan Gri Tonlama (Kenar yumuşatmaları korur, en yüksek doğruluk) ──
-                        try:
-                            data = pytesseract.image_to_data(gray, lang='tur+eng', config='--psm 6', output_type=pytesseract.Output.DICT)
-                            for idx, text in enumerate(data['text']):
-                                w_norm = self._normalize_tr(text)
-                                if w_norm and any(k in w_norm for k in keywords):
-                                    found_idx = idx
-                                    break
-                        except Exception:
-                            pass
-                            
-                        # ── STRATEJİ 2: (Bulunamadıysa) Otsu Eşikleme (Otomatik Kontrast Eşiği) ──
-                        if found_idx == -1:
-                            _, thresh_otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                            # Hata ayıklama için ham görseli kaydet
                             try:
-                                cv2.imwrite("images/debug_tuna_thresh.png", thresh_otsu)
-                            except Exception:
-                                pass
-                            try:
-                                data = pytesseract.image_to_data(thresh_otsu, lang='tur+eng', config='--psm 6', output_type=pytesseract.Output.DICT)
-                                for idx, text in enumerate(data['text']):
-                                    w_norm = self._normalize_tr(text)
-                                    if w_norm and any(k in w_norm for k in keywords):
-                                        found_idx = idx
-                                        break
+                                os.makedirs("images", exist_ok=True)
+                                cv2.imwrite(f"images/debug_tuna_{slc['name']}_raw.png", cropped)
                             except Exception:
                                 pass
                                 
-                        # ── STRATEJİ 3: (Bulunamadıysa) Sabit 120 Eşikleme (Açık renkli yazılar için) ──
-                        if found_idx == -1:
-                            _, thresh_fixed = cv2.threshold(gray, 120, 255, cv2.THRESH_BINARY)
-                            try:
-                                data = pytesseract.image_to_data(thresh_fixed, lang='tur+eng', config='--psm 6', output_type=pytesseract.Output.DICT)
-                                for idx, text in enumerate(data['text']):
-                                    w_norm = self._normalize_tr(text)
-                                    if w_norm and any(k in w_norm for k in keywords):
-                                        found_idx = idx
-                                        break
-                            except Exception:
-                                pass
+                            # 3 kat büyüt (daha net OCR için)
+                            img_scaled = cv2.resize(cropped, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+                            gray = cv2.cvtColor(img_scaled, cv2.COLOR_BGR2GRAY)
+                            
+                            # Eşikleme stratejileri (Parlak Beyaz Yazıları Ayıklamak İçin)
+                            thresh_methods = [
+                                # 1. Yüksek Kontrast Beyaz Eşikleme (Beyaz yazıları doğrudan izole eder)
+                                lambda g: cv2.threshold(g, 190, 255, cv2.THRESH_BINARY)[1],
+                                # 2. Orta Kontrast Beyaz Eşikleme
+                                lambda g: cv2.threshold(g, 150, 255, cv2.THRESH_BINARY)[1],
+                                # 3. Otsu Eşikleme (Otomatik eşik)
+                                lambda g: cv2.threshold(g, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1],
+                                # 4. Ham Gri Tonlama (Eşiklemesiz)
+                                lambda g: g
+                            ]
+                            
+                            for m_idx, method in enumerate(thresh_methods):
+                                processed = method(gray)
                                 
-                        if found_idx != -1 and data is not None:
-                            # Kelimenin koordinatlarını hesapla
-                            sx = data['left'][found_idx]
-                            sy = data['top'][found_idx]
-                            sw = data['width'][found_idx]
-                            sh = data['height'][found_idx]
+                                # Hata ayıklama görüntüsünü kaydet
+                                try:
+                                    cv2.imwrite(f"images/debug_tuna_{slc['name']}_proc_{m_idx}.png", processed)
+                                except Exception:
+                                    pass
+                                    
+                                try:
+                                    text = pytesseract.image_to_string(processed, lang='tur+eng', config='--psm 7')
+                                    text_norm = self._normalize_tr(text)
+                                    
+                                    # Kelime eşleşmesi var mı?
+                                    if text_norm and any(k in text_norm for k in keywords):
+                                        found_slice = slc
+                                        break
+                                except Exception:
+                                    pass
+                                    
+                            if found_slice is not None:
+                                break
+                                
+                        if found_slice is not None:
+                            # Dilimin tam merkezine tıklama yap
+                            click_x = x1 + (x2 - x1) // 2
+                            click_y = found_slice["y1"] + (found_slice["y2"] - found_slice["y1"]) // 2
                             
-                            # 2x ölçeklemeyi geri al
-                            cx = (sx + sw // 2) // 2
-                            cy = (sy + sh // 2) // 2
-                            
-                            # Kırpma alanını ekle -> local koordinat
-                            local_x = crop_x1 + cx
-                            local_y = crop_y1 + cy
-                            
-                            # Tıkla
-                            self._clicker.click_at(local_x, local_y)
-                            
-                            # Biraz bekle (popup kapansın)
+                            self._clicker.click_at(click_x, click_y)
                             time.sleep(random.uniform(0.8, 1.2))
                             
-                            # POST_CATCH durumuna dön, kalan envanter/zırh işleri devam etsin
                             self._transition_to(BotState.POST_CATCH)
-                            self._postcatch_action_done = False # POST_CATCH eylemlerinin tetiklenmesi için
-                            return False, f"Altın Ton Balığı: '{self._cfg.tuna_action}' seçildi ve tıklandı."
+                            self._postcatch_action_done = False
+                            return False, f"Altın Ton Balığı: '{self._cfg.tuna_action}' seçeneği OCR ile '{found_slice['name']}' diliminde bulundu ve tıklandı."
+                            
                     except Exception as e:
                         pass
 
